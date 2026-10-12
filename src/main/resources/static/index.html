@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>file-service</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <h1>file-service</h1>
+    <div id="status" class="status">상태 확인 중</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>업로드</h2>
+      <form id="upload-form">
+        <input type="file" id="file" name="file" required>
+        <button type="submit">업로드</button>
+      </form>
+      <p id="message" class="message"></p>
+    </section>
+
+    <section class="card">
+      <h2>파일 목록 <button id="refresh" class="small">새로 고침</button></h2>
+      <table>
+        <thead>
+          <tr><th>이름</th><th>크기</th><th>올린 시각</th><th>받기</th><th></th></tr>
+        </thead>
+        <tbody id="files"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

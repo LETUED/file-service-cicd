@@ -1,0 +1,22 @@
+# 빌드 산출물
+build/
+.gradle/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+bin/
+
+# 실행 중 생기는 것
+data/
+logs/
+*.log
+
+# 비밀 값. .env.example 만 올림
+.env
+env.sh

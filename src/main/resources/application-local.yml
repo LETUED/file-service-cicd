@@ -1,0 +1,16 @@
+# 내 PC. 디스크에 저장함. S3 · AWS 자격 증명이 전혀 필요 없음.
+file:
+  local:
+    # Windows : C:/CE/98.data/uploads   macOS : /Users/<me>/CE/98.data/uploads
+    # 지정하지 않으면 프로젝트 아래 ./data/uploads (저장소에 올리지 않음)
+    path: ./data/uploads
+
+logging:
+  level:
+    com.example.file: debug
+
+management:
+  endpoint:
+    health:
+      # 개발 환경에서는 항목별 상태를 봄
+      show-details: always
