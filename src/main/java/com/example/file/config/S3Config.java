@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
  * S3 클라이언트. prod 프로파일에서만 만들어짐.
@@ -28,4 +29,12 @@ public class S3Config {
                 .build();
     }
 
+    @Bean
+    public S3Presigner s3Presigner(@Value("${app.s3.region}") String region) {
+        // 프리사인 URL 도 같은 자격 증명(역할)으로 서명함.
+        // 역할 세션이 끝나면 URL 도 무효가 되므로 TTL 을 세션보다 길게 잡아도 의미가 없음.
+        return S3Presigner.builder()
+                .region(Region.of(region))
+                .build();
+    }
 }

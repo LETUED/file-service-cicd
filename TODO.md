@@ -1,6 +1,6 @@
 # TODO 안내
 
-이 태그에서는 비어 있는 메서드가 없음. 앞 태그의 TODO 1 · 2 는 채워진 상태 — 본인 코드와 `git diff file-storage-local file-storage-s3 -- src/main/java/com/example/file/common/FileValidator.java` 로 비교함. 아래는 참고용.
+완성 코드에서 메서드 본문 한 곳(TODO 3)만 비어 있음. TODO 1 · 2 는 앞 태그에서 쓴 결과가 채워져 있음. 본문을 직접 쓰고 테스트로 확인함.
 
 ---
 
@@ -30,6 +30,7 @@
 | --- | --- | --- | --- | --- |
 | 1 | `common/FileValidator.validateExtension(String name)` | 허용하지 않는 확장자 거부 | `extensionOf(name)` · `ALLOWED_EXTENSIONS.contains(ext)` | `run.exe` 가 400 · `note.txt` 는 201 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
 | 2 | `common/FileValidator.validateSize(MultipartFile file)` | 업무 상한 초과 거부 | `file.getSize()` · `maxBytes` | 상한 초과가 400 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
+| 3 | `service/FileService.downloadUrl(String id)` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `get(id)` · `storage.downloadUrl(key, originalName, urlTtl)` | `FileServiceTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 `/url` 200 |
 
 ### 1 · 확장자 검증
 
@@ -66,6 +67,28 @@ curl -s -o /dev/null -w "%{http_code}\n" -F "file=@run.exe" http://localhost:808
 
 **`FileValidatorTest` 의 `상한을_넘는_파일은_거부함` 주석을 풀어야 검증됨.** 테스트는 `new FileValidator(4)` 로 상한을 4바이트로 두고 5바이트 파일을 넣음.
 
+### 3 · 직접 다운로드 URL
+
+**src/main/java/com/example/file/service/FileService.java**
+
+```java
+public Optional<String> downloadUrl(String id) {
+    // TODO 3 · 직접 다운로드 URL
+    // 기능        id 로 목록에서 찾고, 저장소에 프리사인 URL 을 요청해 그대로 돌려줌
+    // 활용        get(id) → StoredFile · storage.downloadUrl(key, originalName, ttl) → Optional<String>
+    // 동작결과    FileServiceTest 통과 · 서버(S3)에서 GET /api/files/{id}/url 이 200
+    return Optional.empty();
+}
+```
+
+| 확인 | 기대 |
+| --- | --- |
+| `./gradlew test` · `FileServiceTest` | 주석을 푼 테스트 통과 · 가짜 저장소가 만든 `https://fake/<key>?expires=300` 이 그대로 옴 |
+| 내 PC `GET /api/files/{id}/url` | 409 · 디스크 저장소는 `Optional.empty()` 를 돌려주므로 작성 전후가 같음 |
+| 서버(S3) `GET /api/files/{id}/url` | 200 `{url, expiresIn}` · 서버 이미지는 완성 코드로 빌드됨 |
+
+**내 PC 에서는 테스트로만 확인됨.** 디스크 저장소는 프리사인 URL 을 만들 수 없으므로 작성 전후 모두 409. `FileServiceTest` 의 `FakeStorage` 가 그 자리를 대신함.
+
 ---
 
 ## 03. 응답 형태
@@ -78,6 +101,13 @@ curl -s -o /dev/null -w "%{http_code}\n" -F "file=@run.exe" http://localhost:808
       "size": 42,
       "contentType": "text/plain",
       "uploadedAt": "2026-10-12T01:02:03Z"
+    }
+
+### DownloadUrlResponse
+
+    {
+      "url": "https://<bucket>.s3.ap-northeast-2.amazonaws.com/uploads/…?X-Amz-Expires=300&…",
+      "expiresIn": 300
     }
 
 ### ErrorResponse
@@ -110,6 +140,8 @@ curl -s -o /dev/null -w "%{http_code}\n" -F "file=@run.exe" http://localhost:808
 | 테스트가 빨강 | 주석을 푼 테스트가 `IllegalArgumentException` 을 기대함 · 다른 예외 타입이면 실패 |
 | 테스트가 안 보임 | 테스트 메서드의 `// @Test` 주석도 풀었는지 |
 | `validateSize` 를 썼는데 10MB 넘는 파일이 413 | 정상 · 멀티파트 상한이 먼저 · 테스트는 4바이트 상한으로 확인함 |
+| `FileServiceTest` 가 `url.isPresent()` 에서 실패 | `return Optional.empty()` 가 그대로 남아 있음 |
+| `/url` 이 내 PC 에서 409 | 정상 · 디스크 저장소 · 서버에서 확인 |
 
 ---
 

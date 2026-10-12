@@ -4,6 +4,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.Optional;
 
 /**
  * 파일 저장소 규약.
@@ -29,4 +31,12 @@ public interface FileStorage {
 
     /** 저장된 파일을 지움. 없어도 예외를 내지 않음 */
     void delete(String key) throws IOException;
+
+    /**
+     * 클라이언트가 저장소에서 직접 받을 수 있는 임시 URL.
+     * 디스크 저장소는 만들 수 없으므로 비어 있음.
+     */
+    default Optional<String> downloadUrl(String key, String originalName, Duration ttl) {
+        return Optional.empty();
+    }
 }

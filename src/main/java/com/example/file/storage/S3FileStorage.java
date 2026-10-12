@@ -14,9 +14,15 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.net.URLEncoder;
+import java.time.Duration;
+import java.util.Optional;
 
 /**
  * S3 저장소. prod 프로파일에서만 올라옴.
@@ -38,10 +44,12 @@ public class S3FileStorage implements FileStorage {
     public static final String PREFIX = "uploads/";
 
     private final S3Client s3;
+    private final S3Presigner presigner;
     private final String bucket;
 
-    public S3FileStorage(S3Client s3, @Value("${app.s3.bucket}") String bucket) {
+    public S3FileStorage(S3Client s3, S3Presigner presigner, @Value("${app.s3.bucket}") String bucket) {
         this.s3 = s3;
+        this.presigner = presigner;
         this.bucket = bucket;
         log.info("S3 저장소 준비 : s3://{}/{}", bucket, PREFIX);
     }
@@ -89,5 +97,26 @@ public class S3FileStorage implements FileStorage {
         log.info("S3 삭제 : s3://{}/{}", bucket, key);
     }
 
+    /**
+     * 프리사인 GET URL. 서명자(이 인스턴스의 역할)의 권한을 ttl 동안 빌려줌.
+     * 응답 헤더를 서명에 포함해 브라우저가 원본 파일명으로 저장하게 함.
+     */
+    @Override
+    public Optional<String> downloadUrl(String key, String originalName, Duration ttl) {
+        String disposition = "attachment; filename*=UTF-8''" + URLEncoder.encode(originalName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        GetObjectRequest get = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .responseContentDisposition(disposition)
+                .build();
+        GetObjectPresignRequest presign = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(get)
+                .build();
+        String url = presigner.presignGetObject(presign).url().toString();
+        log.info("프리사인 GET : {} ({}초)", key, ttl.toSeconds());
+        return Optional.of(url);
+    }
 
 }

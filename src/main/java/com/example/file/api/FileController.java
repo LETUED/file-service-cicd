@@ -1,5 +1,6 @@
 package com.example.file.api;
 
+import com.example.file.api.dto.DownloadUrlResponse;
 import com.example.file.api.dto.FileInfo;
 import com.example.file.api.dto.StatusResponse;
 import com.example.file.service.FileRegistry;
@@ -32,6 +33,7 @@ import java.util.List;
  *   GET    /api/files            목록
  *   GET    /api/files/{id}       정보
  *   GET    /api/files/{id}/content   앱을 거쳐 내려받음
+ *   GET    /api/files/{id}/url   저장소에서 직접 받는 임시 URL (S3 만)
  *   DELETE /api/files/{id}       삭제                               → 204
  *   GET    /api/status           저장소 종류 · 호스트명 · 파일 수
  */
@@ -64,7 +66,7 @@ public class FileController {
         return FileInfo.from(fileService.get(id));
     }
 
-    /** 앱 경유 다운로드. 서버가 파일을 읽어 그대로 흘려보냄 */
+    /** 앱 경유 다운로드. 서버 대역폭과 메모리를 씀 → 07 교안에서 프리사인과 비교함 */
     @GetMapping("/files/{id}/content")
     public ResponseEntity<Resource> download(@PathVariable String id) throws IOException {
         StoredFile file = fileService.get(id);
@@ -77,6 +79,15 @@ public class FileController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .contentType(mediaTypeOf(file.contentType()))
                 .body(body);
+    }
+
+    /** 프리사인 GET URL. 디스크 저장소(local)에서는 404 가 아니라 409 로 "지원 안 함"을 알림 */
+    @GetMapping("/files/{id}/url")
+    public ResponseEntity<DownloadUrlResponse> downloadUrl(@PathVariable String id) {
+        return fileService.downloadUrl(id)
+                .map(url -> ResponseEntity.ok(
+                        new DownloadUrlResponse(id, url, fileService.urlTtl().toSeconds())))
+                .orElseGet(() -> ResponseEntity.status(409).build());
     }
 
     @DeleteMapping("/files/{id}")

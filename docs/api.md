@@ -10,6 +10,7 @@
 | GET | `/api/files` | 목록 (최근 업로드가 위) | 200 |
 | GET | `/api/files/{id}` | 파일 정보 | 200 |
 | GET | `/api/files/{id}/content` | 앱을 거쳐 내려받음 | 200 (바이너리) |
+| GET | `/api/files/{id}/url` | 저장소에서 직접 받는 임시 URL | 200 / local 이면 409 |
 | DELETE | `/api/files/{id}` | 삭제 | 204 |
 | GET | `/api/status` | 저장소 종류 · 호스트명 · 파일 수 | 200 |
 | GET | `/actuator/health` | 생존 확인. prod 에서는 S3 항목 포함 | 200 `{"status":"UP"}` |
@@ -21,6 +22,7 @@
 | --- | --- | --- |
 | 400 | `BAD_REQUEST` | 빈 파일 · 허용하지 않는 확장자 · 경로 문자 · (TODO 2) 업무 상한 초과 |
 | 404 | `NOT_FOUND` | 목록에 없는 id |
+| 409 | (본문 없음) | local 저장소에서 `/url` 요청 |
 | 413 | `PAYLOAD_TOO_LARGE` | 멀티파트 상한(10MB) 초과. 컨트롤러에 닿기 전에 거부됨 |
 | 500 | `STORAGE_ERROR` | 디스크 · S3 입출력 실패. 사유는 서버 로그에만 남김 |
 
@@ -41,6 +43,9 @@ curl -s $BASE/api/files/$ID
 # 앱 경유 다운로드
 curl -s -o got.txt $BASE/api/files/$ID/content && cat got.txt
 
+# 직접 다운로드 URL (S3 저장소만). 주소에 X-Amz-Expires=300 이 보임
+curl -s $BASE/api/files/$ID/url
+
 # 삭제
 curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/api/files/$ID   # 204
 
@@ -58,6 +63,13 @@ curl -s $BASE/api/status
   "size": 38,
   "contentType": "text/plain",
   "uploadedAt": "2026-10-13T01:12:45.120Z"
+}
+
+// GET /api/files/{id}/url → 200
+{
+  "id": "7c2f1d0e-9a44-4b3f-8f1a-2b9c6d5e4f30",
+  "url": "https://cld01-files-20261013.s3.ap-northeast-2.amazonaws.com/uploads/7c2f...hello.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&...",
+  "expiresIn": 300
 }
 
 // GET /api/status → 200

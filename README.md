@@ -1,6 +1,6 @@
 # lab-file-service
 
-파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. 이 태그에 새 TODO 는 없음 · 앞 태그의 TODO 1 · 2 는 채워진 상태로 제공됨.
+파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. TODO 3 을 채워 완성함 · 앞 태그의 TODO 1 · 2 는 채워진 상태로 제공됨.
 
 ## 구성
 
@@ -87,12 +87,13 @@ java -jar build/libs/file-service-1.0.0.jar
 
 ## 무엇을 채우는가
 
-**이 태그에서는 비어 있는 메서드가 없음.** 앞 태그에서 쓴 TODO 1 · 2 가 채워진 상태로 들어 있으므로, 본인이 쓴 코드와 `git diff` 로 비교함.
+**완성 코드에서 메서드 하나(TODO 3)의 본문만 비어 있음.** TODO 1 · 2 는 채워진 상태. 선언문과 주석은 있으므로 그대로 컴파일되고 기동됨. 본문을 쓰고, 주석 처리된 테스트를 풀어 통과시킴.
 
 | 번호 | 파일 · 메서드 | 하는 일 | 확인 |
 | --- | --- | --- | --- |
 | 1 | `common/FileValidator.validateExtension` | 허용하지 않는 확장자 거부 | `run.exe` 업로드가 400 · `FileValidatorTest` |
 | 2 | `common/FileValidator.validateSize` | 업무 상한 초과 거부 | `FileValidatorTest` |
+| 3 | `service/FileService.downloadUrl` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `FileServiceTest` · 서버에서 `/url` 200 |
 
 ```
 ./gradlew test
@@ -107,17 +108,17 @@ java -jar build/libs/file-service-1.0.0.jar
   ├─ FileServiceApplication        기동
   ├─ api
   │  ├─ FileController             표현 계층 · /api/files · /api/status
-  │  └─ dto                        FileInfo · StatusResponse
+  │  └─ dto                        FileInfo · StatusResponse · DownloadUrlResponse
   ├─ service
   │  ├─ FileService                검증 → 저장 → 목록 등록
   │  └─ FileRegistry               파일 목록 · 메모리 Map
   ├─ storage
-  │  ├─ FileStorage                저장소 규약 · save · load · delete
+  │  ├─ FileStorage                저장소 규약 · save · load · delete · downloadUrl
   │  ├─ LocalFileStorage           @Profile("local") · 디스크
-  │  ├─ S3FileStorage              @Profile("prod") · S3
+  │  ├─ S3FileStorage              @Profile("prod") · S3 · 프리사인 GET
   │  └─ StoredFile                 저장된 파일 한 건
   ├─ config
-  │  └─ S3Config                   @Profile("prod") · S3Client · 키 없음 → 역할
+  │  └─ S3Config                   @Profile("prod") · S3Client · S3Presigner · 키 없음 → 역할
   └─ common
      ├─ FileValidator              이름 · 확장자(TODO 1) · 크기(TODO 2) 검증
      ├─ S3HealthIndicator          @Profile("prod") · /actuator/health 의 s3 항목
@@ -127,6 +128,7 @@ java -jar build/libs/file-service-1.0.0.jar
 
   src/test/java/com/example/file
   ├─ common/FileValidatorTest        TODO 1 · 2 확인
+  ├─ service/FileServiceTest         TODO 3 확인 · 가짜 저장소(FakeStorage)
   └─ FileServiceApplicationTest     컨텍스트 기동
 ```
 
@@ -146,6 +148,16 @@ java -jar build/libs/file-service-1.0.0.jar
      └──▶ FileRegistry.put()             메모리
 ```
 
+```
+  브라우저
+     │  GET /api/files/{id}/url
+     ▼
+  FileController ──▶ FileService.downloadUrl() ──▶ S3FileStorage.downloadUrl()
+     │
+     ▼  { url: https://<bucket>.s3…?X-Amz-Expires=300 }
+  브라우저 ──GET <url>──▶ S3                 앱 서버를 거치지 않음
+```
+
 ## 알아 둘 것
 
 **컨트롤러는 `FileStorage` 규약만 호출함.** `LocalFileStorage` · `S3FileStorage` 중 어느 구현이 주입되는지는 프로파일이 지정함. 저장소가 바뀌어도 컨트롤러 · 화면 · 검증 코드의 diff 는 0 줄.
@@ -153,6 +165,14 @@ java -jar build/libs/file-service-1.0.0.jar
 **파일 목록은 메모리에만 있음.** 앱을 다시 기동하면 목록이 비고, ALB 뒤에 인스턴스가 둘이면 목록이 서로 다름. 화면 상단 `host=` 로 확인 가능. "상태를 인스턴스에 두면 안 된다" 를 눈으로 보기 위한 의도된 구조.
 
 **S3 접근에 키가 없음.** `S3Config` 는 자격 증명을 지정하지 않음. SDK 의 기본 자격 증명 체인이 환경 변수 → 프로파일 파일 → 인스턴스 메타데이터(EC2 역할) 순으로 탐색함.
+
+**프리사인 URL 은 역할의 권한을 빌려 주는 것.** 서명한 쪽(EC2 역할)의 권한으로 그 객체 하나를 그 시간(기본 300초) 동안 받을 수 있음. 버킷은 계속 비공개.
+
+| | `/content` 앱 경유 | `/url` 프리사인 |
+| --- | --- | --- |
+| 데이터 경로 | S3 → EC2 → 브라우저 | S3 → 브라우저 |
+| EC2 대역폭 · 메모리 | 사용 | 미사용 |
+| 접근 제어 | 요청마다 앱이 판단 | 발급 시 한 번 판단 · 이후 S3 가 서명만 확인 |
 
 ## 막혔을 때
 
@@ -167,6 +187,7 @@ java -jar build/libs/file-service-1.0.0.jar
 | `NoSuchBucketException` | 버킷 이름 오타 |
 | `SdkClientException … connect timed out` | 프라이빗 서브넷에서 S3 로 가는 경로 · 게이트웨이 엔드포인트 · NAT |
 | `Unable to load credentials` | 인스턴스에 역할 미연결 |
+| `/url` 이 409 | `local` 프로파일 · 디스크 저장소에는 프리사인 없음 |
 
 ---
 
