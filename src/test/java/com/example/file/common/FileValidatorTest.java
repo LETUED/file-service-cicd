@@ -42,17 +42,17 @@ class FileValidatorTest {
     }
 
     // TODO 1 · validateExtension 을 작성한 뒤 아래 주석을 풀면 통과해야 함
-    // @Test
-    // void 허용하지_않는_확장자는_거부함() {
-    //     MockMultipartFile file = new MockMultipartFile("file", "run.exe", "application/octet-stream", new byte[]{1});
-    //     assertThrows(IllegalArgumentException.class, () -> validator.validate(file));
-    // }
+    @Test
+    void 허용하지_않는_확장자는_거부함() {
+        MockMultipartFile file = new MockMultipartFile("file", "run.exe", "application/octet-stream", new byte[]{1});
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(file));
+    }
 
     // TODO 2 · validateSize 를 작성한 뒤 아래 주석을 풀면 통과해야 함
-    // @Test
-    // void 상한을_넘는_파일은_거부함() {
-    //     FileValidator small = new FileValidator(4);
-    //     MockMultipartFile file = new MockMultipartFile("file", "big.txt", "text/plain", "12345".getBytes());
-    //     assertThrows(IllegalArgumentException.class, () -> small.validate(file));
-    // }
+    @Test
+    void 상한을_넘는_파일은_거부함() {
+        FileValidator small = new FileValidator(4);
+        MockMultipartFile file = new MockMultipartFile("file", "big.txt", "text/plain", "12345".getBytes());
+        assertThrows(IllegalArgumentException.class, () -> small.validate(file));
+    }
 }

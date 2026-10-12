@@ -16,7 +16,7 @@ public interface FileStorage {
     /** 저장소 종류. 응답과 로그에 표시함. local 또는 s3 */
     String kind();
 
-    /** 파일 이름으로 저장소 안의 위치(key)를 정함 */
+    /** 파일 이름으로 저장소 안의 위치(key)를 정함. S3 는 uploads/ 접두사를 붙임 */
     default String keyFor(String fileName) {
         return fileName;
     }

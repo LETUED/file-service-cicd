@@ -1,6 +1,6 @@
 # TODO 안내
 
-완성 코드에서 메서드 본문 두 곳(TODO 1 · 2)만 비어 있음. 선언문과 주석은 있으므로 그대로 컴파일되고 기동됨. 본문을 직접 쓰고 테스트로 확인함.
+이 태그에서는 비어 있는 메서드가 없음. 앞 태그의 TODO 1 · 2 는 채워진 상태 — 본인 코드와 `git diff file-storage-local file-storage-s3 -- src/main/java/com/example/file/common/FileValidator.java` 로 비교함. 아래는 참고용.
 
 ---
 

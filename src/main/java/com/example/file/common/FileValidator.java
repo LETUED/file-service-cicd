@@ -56,14 +56,10 @@ public class FileValidator {
 
     /** 확장자가 ALLOWED_EXTENSIONS 에 없으면 거부함 */
     void validateExtension(String name) {
-        // TODO 1 · 확장자 검증
-        //
-        // 기능        name 의 확장자가 ALLOWED_EXTENSIONS 에 없으면 IllegalArgumentException
-        //             문구 예 : "허용하지 않는 확장자: exe"
-        // 활용        extensionOf(name)        → 소문자 확장자 · 없으면 "" (아래에 이미 있음)
-        //             ALLOWED_EXTENSIONS       → Set<String> · contains(ext) 로 포함 여부
-        // 동작결과    run.exe 업로드가 400 BAD_REQUEST · note.txt 는 201
-        //             FileValidatorTest 의 "허용하지_않는_확장자는_거부함" 주석을 풀어 통과
+        String ext = extensionOf(name);
+        if (!ALLOWED_EXTENSIONS.contains(ext)) {
+            throw new IllegalArgumentException("허용하지 않는 확장자: " + ext);
+        }
     }
 
     /**
@@ -71,15 +67,10 @@ public class FileValidator {
      * 이 검증은 그보다 작은 업무 상한을 둘 때 400 으로 동작함.
      */
     void validateSize(MultipartFile file) {
-        // TODO 2 · 크기 상한 검증
-        //
-        // 기능        file.getSize() 가 maxBytes 보다 크면 IllegalArgumentException
-        //             문구 예 : "파일 크기 초과: 12345678 bytes (상한 10485760)"
-        // 활용        file.getSize()           → long · 업로드 본문 바이트 수
-        //             maxBytes                 → long · 생성자에서 주입됨 (app.upload.max-bytes)
-        // 동작결과    상한 초과 업로드가 400 BAD_REQUEST
-        //             FileValidatorTest 의 "상한을_넘는_파일은_거부함" 주석을 풀어 통과
-        //             (멀티파트 자체 상한 10MB 는 413 으로 먼저 걸림 · 이 검증은 그보다 작은 업무 상한용)
+        if (file.getSize() > maxBytes) {
+            throw new IllegalArgumentException(
+                    "파일 크기 초과: " + file.getSize() + " bytes (상한 " + maxBytes + ")");
+        }
     }
 
     /** 확장자를 소문자로 돌려줌. 없으면 빈 문자열 */

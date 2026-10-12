@@ -12,7 +12,7 @@
 | GET | `/api/files/{id}/content` | 앱을 거쳐 내려받음 | 200 (바이너리) |
 | DELETE | `/api/files/{id}` | 삭제 | 204 |
 | GET | `/api/status` | 저장소 종류 · 호스트명 · 파일 수 | 200 |
-| GET | `/actuator/health` | 생존 확인 | 200 `{"status":"UP"}` |
+| GET | `/actuator/health` | 생존 확인. prod 에서는 S3 항목 포함 | 200 `{"status":"UP"}` |
 | GET | `/actuator/info` | 빌드 버전 · 시각 | 200 |
 
 ## 02. 실패 코드
@@ -61,7 +61,7 @@ curl -s $BASE/api/status
 }
 
 // GET /api/status → 200
-{ "storage": "local", "host": "my-pc", "files": 3 }
+{ "storage": "s3", "host": "ip-10-0-11-23", "files": 3 }
 
 // 실패 → 400
 { "status": 400, "code": "BAD_REQUEST", "message": "허용하지 않는 확장자: exe", "timestamp": "2026-10-13T10:12:45.12" }

@@ -1,6 +1,6 @@
 # lab-file-service
 
-파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 디스크 저장소만 있는 첫 태그. TODO 1 · 2 를 채워 완성함.
+파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. 이 태그에 새 TODO 는 없음 · 앞 태그의 TODO 1 · 2 는 채워진 상태로 제공됨.
 
 ## 구성
 
@@ -9,7 +9,8 @@
 | JDK | 21 |
 | 프레임워크 | Spring Boot 4.1.0 |
 | 빌드 | Gradle Wrapper 8.14 · Groovy DSL |
-| 저장소 | 디스크 `local` |
+| AWS SDK | AWS SDK for Java 2.x · `software.amazon.awssdk:s3` |
+| 저장소 | 디스크 `local` · S3 `prod` |
 | 포트 | 8080 |
 | 패키지 | `com.example.file` |
 | 앱 · 이미지 · 컨테이너 이름 | `file-service` |
@@ -67,9 +68,26 @@ http://localhost:8080
 ./gradlew test
 ```
 
+## 서버 실행
+
+EC2 역할과 S3 버킷이 준비된 인스턴스에서 jar 로 기동함. 컨테이너 배포는 다음 태그 `file-deploy-container`.
+
+```
+./gradlew clean bootJar -x test
+export SPRING_PROFILES_ACTIVE=prod APP_S3_BUCKET=<bucket_name> AWS_REGION=ap-northeast-2
+java -jar build/libs/file-service-1.0.0.jar
+```
+
+| 프로파일 | 사용처 | 저장소 | AWS 자격 증명 |
+| --- | --- | --- | --- |
+| `local` | 내 PC | 디스크 `file.local.path` | 불필요 |
+| `prod` | EC2 · 컨테이너 | S3 `APP_S3_BUCKET` | EC2 역할 · 코드 · 설정 · user-data 에 키 없음 |
+
+**`prod` 에서 `APP_S3_BUCKET` 이 비어 있으면 기동 실패.** 잘못된 버킷으로 조용히 기동되는 것을 막기 위한 동작.
+
 ## 무엇을 채우는가
 
-**완성 코드에서 메서드 두 개(TODO 1 · 2)의 본문만 비어 있음.** 선언문과 주석(기능 · 활용 · 동작결과)은 있으므로 그대로 컴파일되고 기동됨. 본문을 쓰고, 주석 처리된 테스트를 풀어 통과시킴.
+**이 태그에서는 비어 있는 메서드가 없음.** 앞 태그에서 쓴 TODO 1 · 2 가 채워진 상태로 들어 있으므로, 본인이 쓴 코드와 `git diff` 로 비교함.
 
 | 번호 | 파일 · 메서드 | 하는 일 | 확인 |
 | --- | --- | --- | --- |
@@ -96,9 +114,13 @@ http://localhost:8080
   ├─ storage
   │  ├─ FileStorage                저장소 규약 · save · load · delete
   │  ├─ LocalFileStorage           @Profile("local") · 디스크
+  │  ├─ S3FileStorage              @Profile("prod") · S3
   │  └─ StoredFile                 저장된 파일 한 건
+  ├─ config
+  │  └─ S3Config                   @Profile("prod") · S3Client · 키 없음 → 역할
   └─ common
      ├─ FileValidator              이름 · 확장자(TODO 1) · 크기(TODO 2) 검증
+     ├─ S3HealthIndicator          @Profile("prod") · /actuator/health 의 s3 항목
      ├─ GlobalExceptionHandler     400 · 404 · 413 · 500 을 한 형태로
      ├─ ErrorResponse
      └─ NotFoundException
@@ -120,7 +142,7 @@ http://localhost:8080
   FileService ──▶ FileValidator          확장자 · 크기
      │
      ├──▶ FileStorage.save()             local  ./data/uploads/<id>_<name>
-     │                                   (다음 태그에서 S3 가 붙음)
+     │                                   prod   s3://<bucket>/uploads/<id>_<name>
      └──▶ FileRegistry.put()             메모리
 ```
 
@@ -130,6 +152,8 @@ http://localhost:8080
 
 **파일 목록은 메모리에만 있음.** 앱을 다시 기동하면 목록이 비고, ALB 뒤에 인스턴스가 둘이면 목록이 서로 다름. 화면 상단 `host=` 로 확인 가능. "상태를 인스턴스에 두면 안 된다" 를 눈으로 보기 위한 의도된 구조.
 
+**S3 접근에 키가 없음.** `S3Config` 는 자격 증명을 지정하지 않음. SDK 의 기본 자격 증명 체인이 환경 변수 → 프로파일 파일 → 인스턴스 메타데이터(EC2 역할) 순으로 탐색함.
+
 ## 막혔을 때
 
 | 증상 | 확인 |
@@ -138,6 +162,11 @@ http://localhost:8080
 | 기동 중 `Port 8080 was already in use` | 다른 앱이 8080 사용 · `application-local.yml` 의 `server.port` |
 | 업로드 400 | 응답의 `message` · 확장자 · 빈 파일 · 경로 문자 |
 | 업로드 413 | 멀티파트 상한 10MB · `spring.servlet.multipart.max-file-size` |
+| `prod` 기동 실패 · `APP_S3_BUCKET` | `.env` 의 버킷 이름 |
+| `health` 가 `DOWN` · `S3Exception 403` | 역할 정책의 `s3:ListBucket` · 버킷 ARN |
+| `NoSuchBucketException` | 버킷 이름 오타 |
+| `SdkClientException … connect timed out` | 프라이빗 서브넷에서 S3 로 가는 경로 · 게이트웨이 엔드포인트 · NAT |
+| `Unable to load credentials` | 인스턴스에 역할 미연결 |
 
 ---
 

@@ -1,0 +1,93 @@
+package com.example.file.storage;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+/**
+ * S3 저장소. prod 프로파일에서만 올라옴.
+ *
+ * 버킷 이름은 환경 변수 APP_S3_BUCKET, 접두사는 uploads/ 고정.
+ * 접두사가 IAM 정책(<student_id>-app-policy 의 uploads/*)과 같아야 함.
+ *
+ * 자격 증명은 코드에 없음. S3Client 가 기본 자격 증명 체인으로 찾음.
+ *   EC2 → 인스턴스 프로파일(역할)
+ *   내 PC → 환경 변수나 ~/.aws (이 과정에서는 쓰지 않음)
+ */
+@Component
+@Profile("prod")
+public class S3FileStorage implements FileStorage {
+
+    private static final Logger log = LoggerFactory.getLogger(S3FileStorage.class);
+
+    /** IAM 정책의 Resource 와 짝이 되는 접두사 */
+    public static final String PREFIX = "uploads/";
+
+    private final S3Client s3;
+    private final String bucket;
+
+    public S3FileStorage(S3Client s3, @Value("${app.s3.bucket}") String bucket) {
+        this.s3 = s3;
+        this.bucket = bucket;
+        log.info("S3 저장소 준비 : s3://{}/{}", bucket, PREFIX);
+    }
+
+    @Override
+    public String kind() {
+        return "s3";
+    }
+
+    @Override
+    public String keyFor(String fileName) {
+        return PREFIX + fileName;
+    }
+
+    @Override
+    public String save(MultipartFile file, String key) throws IOException {
+        String objectKey = key;
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(objectKey)
+                .contentType(file.getContentType())
+                .contentLength(file.getSize())
+                .build();
+        // fromInputStream → 파일을 메모리에 다 올리지 않고 스트림으로 보냄. 길이를 함께 줘야 함
+        s3.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+        log.info("S3 저장 : s3://{}/{} ({} bytes)", bucket, objectKey, file.getSize());
+        return objectKey;
+    }
+
+    @Override
+    public Resource load(String key) throws IOException {
+        try {
+            GetObjectRequest request = GetObjectRequest.builder().bucket(bucket).key(key).build();
+            // getObject 의 응답 스트림을 그대로 HTTP 응답으로 흘려보냄 (앱 경유 다운로드)
+            return new InputStreamResource(s3.getObject(request));
+        } catch (NoSuchKeyException e) {
+            throw new FileNotFoundException(key);
+        }
+    }
+
+    @Override
+    public void delete(String key) throws IOException {
+        // S3 삭제는 없는 키여도 성공으로 돌려줌. 버전 관리 버킷이면 삭제 마커가 얹힘
+        s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+        log.info("S3 삭제 : s3://{}/{}", bucket, key);
+    }
+
+
+}

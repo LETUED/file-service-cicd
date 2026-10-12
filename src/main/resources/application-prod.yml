@@ -1,0 +1,16 @@
+# 서버. S3 에 저장함. 자격 증명은 EC2 역할(인스턴스 프로파일)에서 옴.
+app:
+  s3:
+    # 버킷 이름은 환경 변수로만 받음. 값이 없으면 기동이 실패함 (의도된 동작)
+    bucket: ${APP_S3_BUCKET}
+    region: ${AWS_REGION:ap-northeast-2}
+
+logging:
+  level:
+    com.example.file: info
+
+management:
+  endpoint:
+    health:
+      # 운영에서는 UP/DOWN 만 노출. 버킷 이름 등 세부는 숨김
+      show-details: never

@@ -18,12 +18,20 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    awsSdkVersion = '2.31.59'
+}
+
 dependencies {
     // 웹 요청 처리. board-app-infra-lecture 와 같은 스타터.
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
     // 생존 확인(/actuator/health)과 빌드 정보(/actuator/info).
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // AWS SDK for Java 2.x — 버전은 BOM 하나로 맞춤.
+    implementation platform("software.amazon.awssdk:bom:${awsSdkVersion}")
+    implementation 'software.amazon.awssdk:s3'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
