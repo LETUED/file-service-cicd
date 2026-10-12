@@ -1,6 +1,6 @@
 # lab-file-service
 
-파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. TODO 3 을 채워 완성함 · 앞 태그의 TODO 1 · 2 는 채워진 상태로 제공됨.
+파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. 이 태그에 새 TODO 는 없음 · TODO 1 · 2 · 3 모두 채워진 상태로 제공됨.
 
 ## 구성
 
@@ -11,7 +11,7 @@
 | 빌드 | Gradle Wrapper 8.14 · Groovy DSL |
 | AWS SDK | AWS SDK for Java 2.x · `software.amazon.awssdk:s3` |
 | 저장소 | 디스크 `local` · S3 `prod` |
-| 포트 | 8080 |
+| 포트 | 8080 · 컨테이너는 80 → 8080 |
 | 패키지 | `com.example.file` |
 | 앱 · 이미지 · 컨테이너 이름 | `file-service` |
 
@@ -70,13 +70,21 @@ http://localhost:8080
 
 ## 서버 실행
 
-EC2 역할과 S3 버킷이 준비된 인스턴스에서 jar 로 기동함. 컨테이너 배포는 다음 태그 `file-deploy-container`.
+공용 이미지 `<dockerhub_id>/file-service:1.0.0` 을 그대로 씀. **학습자는 빌드하지 않음.** `<dockerhub_id>` 는 수업에서 공유되는 Docker Hub 계정.
 
 ```
-./gradlew clean bootJar -x test
-export SPRING_PROFILES_ACTIVE=prod APP_S3_BUCKET=<bucket_name> AWS_REGION=ap-northeast-2
-java -jar build/libs/file-service-1.0.0.jar
+mkdir -p ~/file-service && cd ~/file-service
+curl -sO <repo_raw>/compose.yml
+curl -sO <repo_raw>/.env.example
+cp .env.example .env && chmod 600 .env
+docker compose up -d
 ```
+
+| 확인 | 값 |
+| --- | --- |
+| `docker compose logs -f` | `S3 저장소 준비 : s3://<bucket>/uploads/` |
+| `curl -s localhost/actuator/health` | `{"status":"UP"}` |
+| `curl -s localhost/api/status` | `{"storage":"s3", …}` |
 
 | 프로파일 | 사용처 | 저장소 | AWS 자격 증명 |
 | --- | --- | --- | --- |
@@ -87,7 +95,7 @@ java -jar build/libs/file-service-1.0.0.jar
 
 ## 무엇을 채우는가
 
-**완성 코드에서 메서드 하나(TODO 3)의 본문만 비어 있음.** TODO 1 · 2 는 채워진 상태. 선언문과 주석은 있으므로 그대로 컴파일되고 기동됨. 본문을 쓰고, 주석 처리된 테스트를 풀어 통과시킴.
+**이 태그에서는 비어 있는 메서드가 없음.** TODO 1 · 2 · 3 이 모두 채워진 상태 — 본인이 쓴 코드와 `git diff` 로 비교함.
 
 | 번호 | 파일 · 메서드 | 하는 일 | 확인 |
 | --- | --- | --- | --- |

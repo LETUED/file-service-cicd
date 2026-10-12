@@ -72,11 +72,11 @@ class FileServiceTest {
     }
 
     // TODO 3 · FileService.downloadUrl 을 작성한 뒤 아래 주석을 풀면 통과해야 함
-    // @Test
-    // void 직접_다운로드_URL_은_저장소가_만든_값을_그대로_돌려줌() throws IOException {
-    //     StoredFile stored = uploadHello();
-    //     Optional<String> url = service.downloadUrl(stored.id());
-    //     assertTrue(url.isPresent());
-    //     assertEquals("https://fake/" + stored.key() + "?expires=300", url.get());
-    // }
+    @Test
+    void 직접_다운로드_URL_은_저장소가_만든_값을_그대로_돌려줌() throws IOException {
+        StoredFile stored = uploadHello();
+        Optional<String> url = service.downloadUrl(stored.id());
+        assertTrue(url.isPresent());
+        assertEquals("https://fake/" + stored.key() + "?expires=300", url.get());
+    }
 }
