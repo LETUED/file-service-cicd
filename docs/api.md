@@ -11,6 +11,8 @@
 | GET | `/api/files/{id}` | 파일 정보 | 200 |
 | GET | `/api/files/{id}/content` | 앱을 거쳐 내려받음 | 200 (바이너리) |
 | GET | `/api/files/{id}/url` | 저장소에서 직접 받는 임시 URL | 200 / local 이면 409 |
+| POST | `/api/files/presign` | 직접 업로드 1단계. JSON `{name, contentType}` → PUT 용 임시 URL (1.1.0) | 201 / local 이면 409 |
+| POST | `/api/files/{id}/complete` | 직접 업로드 2단계. S3 에 객체가 있는지 확인 후 목록 등록 (1.1.0) | 200 |
 | DELETE | `/api/files/{id}` | 삭제 | 204 |
 | GET | `/api/status` | 저장소 종류 · 호스트명 · 파일 수 | 200 |
 | GET | `/actuator/health` | 생존 확인. prod 에서는 S3 항목 포함 | 200 `{"status":"UP"}` |
@@ -22,7 +24,9 @@
 | --- | --- | --- |
 | 400 | `BAD_REQUEST` | 빈 파일 · 허용하지 않는 확장자 · 경로 문자 · (TODO 2) 업무 상한 초과 |
 | 404 | `NOT_FOUND` | 목록에 없는 id |
-| 409 | (본문 없음) | local 저장소에서 `/url` 요청 |
+| 409 | (본문 없음) | local 저장소에서 `/url` · `/presign` 요청 |
+| 400 | `BAD_REQUEST` | `/complete` 를 PUT 전에 부름 (저장소에 객체 없음) |
+| 404 | `NOT_FOUND` | `/complete` 를 두 번 부름 (대기 목록에 없음) |
 | 413 | `PAYLOAD_TOO_LARGE` | 멀티파트 상한(10MB) 초과. 컨트롤러에 닿기 전에 거부됨 |
 | 500 | `STORAGE_ERROR` | 디스크 · S3 입출력 실패. 사유는 서버 로그에만 남김 |
 

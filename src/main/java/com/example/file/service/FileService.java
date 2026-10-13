@@ -60,6 +60,42 @@ public class FileService {
         return stored;
     }
 
+    /**
+     * 직접 업로드 1단계. 이름을 검증하고 PUT 용 임시 URL 을 만듦.
+     * 아직 저장소에 객체가 없으므로 목록에 넣지 않고 "대기" 로 둠.
+     */
+    public PendingUpload presignUpload(String name, String contentType) {
+        validator.validateName(name);
+        String id = UUID.randomUUID().toString();
+        String key = storage.keyFor(id + "_" + name);
+        String url = storage.uploadUrl(key, contentType, urlTtl)
+                .orElseThrow(() -> new IllegalStateException("이 저장소는 직접 업로드를 지원하지 않음"));
+        registry.putPending(new StoredFile(id, name, key, -1, contentType, Instant.now()));
+        log.info("직접 업로드 준비 : {} → {}", name, key);
+        return new PendingUpload(id, url, urlTtl.toSeconds());
+    }
+
+    /**
+     * 직접 업로드 2단계. 브라우저가 PUT 을 마친 뒤 부름.
+     * 저장소에 객체가 실제로 있는지(headObject) 확인하고 나서야 목록에 올림.
+     * 브라우저 말만 믿고 올리면, 실패한 업로드가 목록에 남음.
+     */
+    public StoredFile completeUpload(String id) throws IOException {
+        StoredFile pending = registry.takePending(id)
+                .orElseThrow(() -> new NotFoundException("대기 중인 업로드 없음: " + id));
+        long size = storage.size(pending.key())
+                .orElseThrow(() -> new IllegalArgumentException("저장소에 객체가 없음. PUT 이 끝나지 않았거나 실패함"));
+        StoredFile stored = new StoredFile(id, pending.originalName(), pending.key(), size,
+                pending.contentType(), Instant.now());
+        registry.put(stored);
+        log.info("직접 업로드 완료 : {} ({} bytes)", stored.originalName(), size);
+        return stored;
+    }
+
+    /** 1단계 결과. 컨트롤러가 응답으로 바꿈 */
+    public record PendingUpload(String id, String url, long expiresIn) {
+    }
+
     public List<StoredFile> list() {
         return registry.findAll();
     }

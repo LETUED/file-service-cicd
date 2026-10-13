@@ -12,10 +12,12 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -119,4 +121,35 @@ public class S3FileStorage implements FileStorage {
         return Optional.of(url);
     }
 
+    /**
+     * 프리사인 PUT URL. 브라우저가 이 주소로 파일 본문을 PUT 하면 S3 에 바로 저장됨.
+     * Content-Type 을 서명에 넣었으므로 브라우저도 같은 Content-Type 헤더를 보내야 함.
+     * 앱 서버는 본문을 전혀 거치지 않음 → 07 교안의 "앱 경유 vs 직접" 비교 포인트.
+     */
+    @Override
+    public Optional<String> uploadUrl(String key, String contentType, Duration ttl) {
+        PutObjectRequest put = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(contentType)
+                .build();
+        PutObjectPresignRequest presign = PutObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .putObjectRequest(put)
+                .build();
+        String url = presigner.presignPutObject(presign).url().toString();
+        log.info("프리사인 PUT : {} ({}초)", key, ttl.toSeconds());
+        return Optional.of(url);
+    }
+
+    /** headObject → 본문을 받지 않고 메타데이터만 읽음. 직접 업로드가 끝났는지 확인할 때 씀 */
+    @Override
+    public Optional<Long> size(String key) throws IOException {
+        try {
+            return Optional.of(s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build())
+                    .contentLength());
+        } catch (NoSuchKeyException e) {
+            return Optional.empty();
+        }
+    }
 }

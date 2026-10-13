@@ -39,4 +39,17 @@ public interface FileStorage {
     default Optional<String> downloadUrl(String key, String originalName, Duration ttl) {
         return Optional.empty();
     }
+
+    /**
+     * 클라이언트가 저장소에 직접 올릴 수 있는 임시 URL (HTTP PUT).
+     * 디스크 저장소는 만들 수 없으므로 비어 있음.
+     */
+    default Optional<String> uploadUrl(String key, String contentType, Duration ttl) {
+        return Optional.empty();
+    }
+
+    /** 저장소에 실제로 있는 객체의 크기. 없으면 비어 있음. 직접 업로드 완료 확인에 씀 */
+    default Optional<Long> size(String key) throws IOException {
+        return Optional.empty();
+    }
 }

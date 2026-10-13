@@ -24,6 +24,7 @@
 | `README.md` | 저장소 구성 · 실행 · 태그 |
 | `TODO.md` | 채울 자리 · 주석 읽는 법 · 확인 기준 |
 | `docs/api.md` | 주소 · 요청 · 응답 · 실패 코드 |
+| `docs/presign-put.md` | 직접 업로드 3단계 · 버킷 CORS |
 
 ## 태그
 
@@ -70,7 +71,7 @@ http://localhost:8080
 
 ## 서버 실행
 
-공용 이미지 `<dockerhub_id>/file-service:1.0.0` 을 그대로 씀. **학습자는 빌드하지 않음.** `<dockerhub_id>` 는 수업에서 공유되는 Docker Hub 계정.
+공용 이미지 `<dockerhub_id>/file-service:1.1.0` 을 그대로 씀. **학습자는 빌드하지 않음.** `<dockerhub_id>` 는 수업에서 공유되는 Docker Hub 계정.
 
 ```
 mkdir -p ~/file-service && cd ~/file-service
@@ -116,14 +117,14 @@ docker compose up -d
   ├─ FileServiceApplication        기동
   ├─ api
   │  ├─ FileController             표현 계층 · /api/files · /api/status
-  │  └─ dto                        FileInfo · StatusResponse · DownloadUrlResponse
+  │  └─ dto                        FileInfo · StatusResponse · DownloadUrlResponse · PresignUpload*
   ├─ service
   │  ├─ FileService                검증 → 저장 → 목록 등록
-  │  └─ FileRegistry               파일 목록 · 메모리 Map
+  │  └─ FileRegistry               파일 목록 · 메모리 Map · 직접 업로드 대기 목록
   ├─ storage
-  │  ├─ FileStorage                저장소 규약 · save · load · delete · downloadUrl
+  │  ├─ FileStorage                저장소 규약 · save · load · delete · downloadUrl · uploadUrl · size
   │  ├─ LocalFileStorage           @Profile("local") · 디스크
-  │  ├─ S3FileStorage              @Profile("prod") · S3 · 프리사인 GET
+  │  ├─ S3FileStorage              @Profile("prod") · S3 · 프리사인 GET · PUT
   │  └─ StoredFile                 저장된 파일 한 건
   ├─ config
   │  └─ S3Config                   @Profile("prod") · S3Client · S3Presigner · 키 없음 → 역할
@@ -181,6 +182,8 @@ docker compose up -d
 | 데이터 경로 | S3 → EC2 → 브라우저 | S3 → 브라우저 |
 | EC2 대역폭 · 메모리 | 사용 | 미사용 |
 | 접근 제어 | 요청마다 앱이 판단 | 발급 시 한 번 판단 · 이후 S3 가 서명만 확인 |
+
+**직접 업로드는 3단계.** `POST /api/files/presign` → 브라우저가 S3 로 `PUT` → `POST /api/files/{id}/complete`. 본문은 EC2 를 거치지 않음. 완료 단계에서 서버가 `headObject` 로 객체를 확인한 뒤 목록에 올림. 자세한 것은 `docs/presign-put.md`.
 
 ## 막혔을 때
 

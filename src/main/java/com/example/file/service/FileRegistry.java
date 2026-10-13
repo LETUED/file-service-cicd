@@ -21,6 +21,9 @@ public class FileRegistry {
 
     private final Map<String, StoredFile> files = new ConcurrentHashMap<>();
 
+    /** 직접 업로드 대기 목록. PUT 이 끝나고 complete 가 오기 전까지만 있음 */
+    private final Map<String, StoredFile> pending = new ConcurrentHashMap<>();
+
     public void put(StoredFile file) {
         files.put(file.id(), file);
     }
@@ -38,6 +41,15 @@ public class FileRegistry {
 
     public void remove(String id) {
         files.remove(id);
+    }
+
+    public void putPending(StoredFile file) {
+        pending.put(file.id(), file);
+    }
+
+    /** 대기 목록에서 꺼내며 지움. 두 번 complete 하면 두 번째는 비어 있음 */
+    public Optional<StoredFile> takePending(String id) {
+        return Optional.ofNullable(pending.remove(id));
     }
 
     public int size() {

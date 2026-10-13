@@ -2,6 +2,8 @@ package com.example.file.api;
 
 import com.example.file.api.dto.DownloadUrlResponse;
 import com.example.file.api.dto.FileInfo;
+import com.example.file.api.dto.PresignUploadRequest;
+import com.example.file.api.dto.PresignUploadResponse;
 import com.example.file.api.dto.StatusResponse;
 import com.example.file.service.FileRegistry;
 import com.example.file.service.FileService;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,6 +37,8 @@ import java.util.List;
  *   GET    /api/files/{id}       정보
  *   GET    /api/files/{id}/content   앱을 거쳐 내려받음
  *   GET    /api/files/{id}/url   저장소에서 직접 받는 임시 URL (S3 만)
+ *   POST   /api/files/presign    직접 업로드 1단계 : PUT 용 임시 URL (S3 만)       → 201
+ *   POST   /api/files/{id}/complete  직접 업로드 2단계 : 객체 확인 후 목록 등록  → 200
  *   DELETE /api/files/{id}       삭제                               → 204
  *   GET    /api/status           저장소 종류 · 호스트명 · 파일 수
  */
@@ -54,6 +59,25 @@ public class FileController {
         StoredFile stored = fileService.upload(file);
         return ResponseEntity.created(URI.create("/api/files/" + stored.id()))
                 .body(FileInfo.from(stored));
+    }
+
+    /** 직접 업로드 1단계. local 저장소에서는 409 */
+    @PostMapping("/files/presign")
+    public ResponseEntity<PresignUploadResponse> presign(@RequestBody PresignUploadRequest request) {
+        String contentType = request.contentType() == null || request.contentType().isBlank()
+                ? MediaType.APPLICATION_OCTET_STREAM_VALUE : request.contentType();
+        try {
+            FileService.PendingUpload p = fileService.presignUpload(request.name(), contentType);
+            return ResponseEntity.status(201).body(new PresignUploadResponse(p.id(), p.url(), p.expiresIn()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).build();
+        }
+    }
+
+    /** 직접 업로드 2단계. 저장소에 객체가 없으면 400 */
+    @PostMapping("/files/{id}/complete")
+    public FileInfo complete(@PathVariable String id) throws IOException {
+        return FileInfo.from(fileService.completeUpload(id));
     }
 
     @GetMapping("/files")

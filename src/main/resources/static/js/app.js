@@ -63,20 +63,70 @@ $('#upload-form').addEventListener('submit', async (ev) => {
   const file = $('#file').files[0];
   if (!file) return;
 
+  if ($('#direct').checked) {
+    await uploadDirect(file);
+  } else {
+    await uploadViaApp(file);
+  }
+  await Promise.all([loadFiles(), loadStatus()]);
+});
+
+// 앱 경유 업로드 : 브라우저 → 앱 서버 → 저장소
+async function uploadViaApp(file) {
   const form = new FormData();
   form.append('file', file);
 
-  showMessage('업로드 중...');
+  showMessage('업로드 중 (앱 경유)...');
   const res = await fetch(API, { method: 'POST', body: form });
   if (res.ok) {
-    showMessage(`업로드 완료: ${file.name}`, 'ok');
+    showMessage(`업로드 완료 (앱 경유): ${file.name}`, 'ok');
     $('#upload-form').reset();
   } else {
     const err = await res.json().catch(() => ({ message: res.status }));
     showMessage(`실패 (${res.status}): ${err.message}`, 'error');
   }
-  await Promise.all([loadFiles(), loadStatus()]);
-});
+}
+
+// 직접 업로드 : 1) 앱에서 PUT 용 URL 발급  2) 브라우저 → S3 로 PUT  3) 앱에 완료 알림
+// 파일 본문은 앱 서버를 거치지 않음. 개발자 도구 Network 탭에서 PUT 의 호스트가 s3 인 것을 볼 것
+async function uploadDirect(file) {
+  const contentType = file.type || 'application/octet-stream';
+
+  showMessage('1/3 URL 발급 중...');
+  const res1 = await fetch(`${API}/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: file.name, contentType })
+  });
+  if (res1.status === 409) {
+    showMessage('디스크 저장소에서는 직접 업로드를 할 수 없음 (S3 저장소에서만 동작)', 'error');
+    return;
+  }
+  if (!res1.ok) {
+    const err = await res1.json().catch(() => ({ message: res1.status }));
+    showMessage(`URL 발급 실패 (${res1.status}): ${err.message}`, 'error');
+    return;
+  }
+  const { id, url, expiresIn } = await res1.json();
+
+  showMessage(`2/3 S3 로 PUT 중... (URL 유효 ${expiresIn}초)`);
+  // Content-Type 은 서명에 포함되어 있음. 다른 값을 보내면 S3 가 403 SignatureDoesNotMatch 를 돌려줌
+  const res2 = await fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
+  if (!res2.ok) {
+    showMessage(`S3 PUT 실패 (${res2.status}). 버킷 CORS 또는 서명을 확인할 것`, 'error');
+    return;
+  }
+
+  showMessage('3/3 완료 알림 중...');
+  const res3 = await fetch(`${API}/${id}/complete`, { method: 'POST' });
+  if (res3.ok) {
+    showMessage(`업로드 완료 (직접): ${file.name}`, 'ok');
+    $('#upload-form').reset();
+  } else {
+    const err = await res3.json().catch(() => ({ message: res3.status }));
+    showMessage(`완료 처리 실패 (${res3.status}): ${err.message}`, 'error');
+  }
+}
 
 // 발급된 프리사인 URL 을 화면에 보여 줌. 호스트가 S3 이고 X-Amz-Expires 가 들어 있는 것을 눈으로 확인하는 용도
 function showPresignedUrl(url, expiresIn) {
