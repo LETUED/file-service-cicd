@@ -14,8 +14,8 @@
 | POST | `/api/files/presign` | 직접 업로드 1단계. JSON `{name, contentType}` → PUT 용 임시 URL (1.1.0) | 201 / local 이면 409 |
 | POST | `/api/files/{id}/complete` | 직접 업로드 2단계. S3 에 객체가 있는지 확인 후 목록 등록 (1.1.0) | 200 |
 | DELETE | `/api/files/{id}` | 삭제 | 204 |
-| GET | `/api/status` | 저장소 종류 · 호스트명 · 파일 수 | 200 |
-| GET | `/actuator/health` | 생존 확인. prod 에서는 S3 항목 포함 | 200 `{"status":"UP"}` |
+| GET | `/api/status` | 저장소 · 목록 DB · 호스트명 · 파일 수 | 200 |
+| GET | `/actuator/health` | 생존 확인. prod 에서는 DB(RDS) · S3 검사 포함 · 하나라도 실패하면 `DOWN` · 503 (1.2.0) | 200 `{"status":"UP"}` |
 | GET | `/actuator/info` | 빌드 버전 · 시각 | 200 |
 
 ## 02. 실패 코드
@@ -77,7 +77,7 @@ curl -s $BASE/api/status
 }
 
 // GET /api/status → 200
-{ "storage": "s3", "host": "ip-10-0-11-23", "files": 3 }
+{ "storage": "s3", "registry": "mysql", "host": "ip-10-0-11-23", "files": 3 }
 
 // 실패 → 400
 { "status": 400, "code": "BAD_REQUEST", "message": "허용하지 않는 확장자: exe", "timestamp": "2026-10-13T10:12:45.12" }

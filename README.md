@@ -1,21 +1,23 @@
 # lab-file-service
 
-파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 내 PC 에서는 디스크, 서버에서는 S3 에 저장함. 이 태그에 새 TODO 는 없음 · TODO 1 · 2 · 3 모두 채워진 상태로 제공됨.
+파일 업로드 · 목록 · 다운로드 · 삭제 서비스. 파일 본체는 내 PC 에서는 디스크, 서버에서는 S3 에 두고, **파일 목록은 이 태그부터 데이터베이스(내 PC H2 · 서버 RDS MySQL)에 둠.** 이 태그에서 새로 채울 곳은 TODO 4 하나 · TODO 1 · 2 · 3 은 채워진 상태로 제공됨.
 
 ## 구성
 
 | 항목 | 값 |
 | --- | --- |
 | JDK | 21 |
-| 프레임워크 | Spring Boot 4.1.0 |
+| 프레임워크 | Spring Boot 4.1.0 · Spring Data JPA |
 | 빌드 | Gradle Wrapper 8.14 · Groovy DSL |
 | AWS SDK | AWS SDK for Java 2.x · `software.amazon.awssdk:s3` |
-| 저장소 | 디스크 `local` · S3 `prod` |
+| 파일 본체 | 디스크 `local` · S3 `prod` |
+| 파일 목록 | H2 메모리 `local` · RDS MySQL 8.4 `prod` |
+| 연결 풀 | HikariCP (Spring Boot 기본) |
 | 포트 | 8080 · 컨테이너는 80 → 8080 |
 | 패키지 | `com.example.file` |
 | 앱 · 이미지 · 컨테이너 이름 | `file-service` |
 
-**데이터베이스 · 캐시 · 로그인 없음.** 파일 목록은 메모리에만 둠.
+**캐시 · 로그인 없음.** 파일 목록 · 직접 업로드 대기 행은 데이터베이스 표 `file_record` 에 둠 — 인스턴스가 몇 대든 같은 목록.
 
 ## 문서
 
@@ -25,6 +27,7 @@
 | `TODO.md` | 채울 자리 · 주석 읽는 법 · 확인 기준 |
 | `docs/api.md` | 주소 · 요청 · 응답 · 실패 코드 |
 | `docs/presign-put.md` | 직접 업로드 3단계 · 버킷 CORS |
+| `docs/rds.md` | 목록을 RDS 로 · 관리형 비밀 · 템플릿 user-data · 연결 풀 (1.2.0) |
 
 ## 태그
 
@@ -37,6 +40,7 @@
 | 프리사인 다운로드 | `file-storage-presign-get` | `/api/files/{id}/url` · TODO 3 · `FileServiceTest` |
 | 컨테이너 이미지와 배포 설정 | `file-deploy-container` | Dockerfile · compose · `.env.example` · 이미지 `1.0.0` |
 | 직접 업로드와 무중단 배포 | `file-storage-presign-put` | `/presign` → PUT → `/complete` · 버킷 CORS · 이미지 `1.1.0` |
+| 파일 목록을 RDS 로 | `file-registry-rds` | `FileRegistry` Map → JPA · `FileRecord` · `FileRecordRepository` · H2 / MySQL · TODO 4 · `FileRegistryTest` · 이미지 `1.2.0` |
 
 ```
 git clone https://github.com/<github_org>/lab-file-service.git
@@ -46,6 +50,14 @@ git diff file-storage-local file-storage-s3 --stat
 ```
 
 **`--stat` 이 다음 주제에서 바뀌는 파일 목록.** 컨트롤러가 목록에 없으면 규약이 지켜진 것.
+
+이미 clone 한 저장소에 새 태그가 추가되면 받아서 그 태그에서 내 브랜치를 만듦. `main` 에서 작업하지 않으므로 충돌이 없음.
+
+```
+git fetch origin --tags
+git switch -c my-rds file-registry-rds
+git diff file-storage-presign-put file-registry-rds --stat
+```
 
 ## 실행
 
@@ -59,9 +71,10 @@ http://localhost:8080
 
 | 확인 | 값 |
 | --- | --- |
-| 상단 상태 줄 | `storage=local  host=…  files=0` |
+| 상단 상태 줄 | `storage=local  registry=h2  host=…  files=0` |
 | 업로드한 파일 | `./data/uploads/` |
-| `GET /api/status` | `{"storage":"local","host":"…","files":0}` |
+| `GET /api/status` | `{"storage":"local","registry":"h2","host":"…","files":0}` |
+| 기동 로그 | `Hibernate: create table file_record …` — H2 에 표 생성 · 앱을 끄면 목록이 사라짐(파일 본체는 디스크에 남음) |
 
 처음 기동은 의존성 내려받기로 1 ~ 3분 걸림. 업로드 경로는 `application-local.yml` 의 `file.local.path`.
 
@@ -71,38 +84,33 @@ http://localhost:8080
 
 ## 서버 실행
 
-공용 이미지 `<dockerhub_id>/file-service:1.1.0` 을 그대로 씀. **학습자는 빌드하지 않음.** `<dockerhub_id>` 는 수업에서 공유되는 Docker Hub 계정.
+공용 이미지 `<dockerhub_id>/file-service:1.2.0` 을 그대로 씀. **학습자는 빌드하지 않음.** `<dockerhub_id>` 는 수업에서 공유되는 Docker Hub 계정.
 
-```
-mkdir -p ~/file-service && cd ~/file-service
-curl -sO <repo_raw>/compose.yml
-curl -sO <repo_raw>/.env.example
-cp .env.example .env && chmod 600 .env
-docker compose up -d
-```
+서버에서는 시작 템플릿 user-data 가 `compose.yml` · `.env` 를 만들고, DB 암호는 **Secrets Manager 의 RDS 관리형 비밀을 인스턴스 역할로 읽어** `.env` 에 넣음 · 사람이 암호를 적지 않음. user-data 전체와 연결 풀 설정은 `docs/rds.md`.
 
 | 확인 | 값 |
 | --- | --- |
 | `docker compose logs -f` | `S3 저장소 준비 : s3://<bucket>/uploads/` |
 | `curl -s localhost/actuator/health` | `{"status":"UP"}` |
-| `curl -s localhost/api/status` | `{"storage":"s3", …}` |
+| `curl -s localhost/api/status` | `{"storage":"s3","registry":"mysql", …}` · 인스턴스 두 대의 `files` 가 같음 |
 
 | 프로파일 | 사용처 | 저장소 | AWS 자격 증명 |
 | --- | --- | --- | --- |
-| `local` | 내 PC | 디스크 `file.local.path` | 불필요 |
-| `prod` | EC2 · 컨테이너 | S3 `APP_S3_BUCKET` | EC2 역할 · 코드 · 설정 · user-data 에 키 없음 |
+| `local` | 내 PC | 디스크 `file.local.path` · 목록 H2 메모리 | 불필요 |
+| `prod` | EC2 · 컨테이너 | S3 `APP_S3_BUCKET` · 목록 RDS `DB_URL` | EC2 역할 · DB 암호는 Secrets Manager → 역할 → `.env` · 코드 · 설정 · user-data 에 키 · 암호 없음 |
 
-**`prod` 에서 `APP_S3_BUCKET` 이 비어 있으면 기동 실패.** 잘못된 버킷으로 조용히 기동되는 것을 막기 위한 동작.
+**`prod` 에서 `APP_S3_BUCKET` · `DB_URL` 이 비어 있으면 기동 실패.** 잘못된 설정으로 조용히 기동되는 것을 막기 위한 동작.
 
 ## 무엇을 채우는가
 
-**이 태그에서는 비어 있는 메서드가 없음.** TODO 1 · 2 · 3 이 모두 채워진 상태 — 본인이 쓴 코드와 `git diff` 로 비교함.
+**이 태그에서 새로 채울 곳은 TODO 4 하나.** TODO 1 · 2 · 3 은 앞 태그에서 작성한 결과가 채워져 있음 — 본인이 쓴 코드와 `git diff` 로 비교함.
 
 | 번호 | 파일 · 메서드 | 하는 일 | 확인 |
 | --- | --- | --- | --- |
-| 1 | `common/FileValidator.validateExtension` | 허용하지 않는 확장자 거부 | `run.exe` 업로드가 400 · `FileValidatorTest` |
-| 2 | `common/FileValidator.validateSize` | 업무 상한 초과 거부 | `FileValidatorTest` |
-| 3 | `service/FileService.downloadUrl` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `FileServiceTest` · 서버에서 `/url` 200 |
+| 1 (채워짐) | `common/FileValidator.validateExtension` | 허용하지 않는 확장자 거부 | `run.exe` 업로드가 400 · `FileValidatorTest` |
+| 2 (채워짐) | `common/FileValidator.validateSize` | 업무 상한 초과 거부 | `FileValidatorTest` |
+| 3 (채워짐) | `service/FileService.downloadUrl` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `FileServiceTest` · 서버에서 `/url` 200 |
+| **4** | `service/FileRegistry.takePending` | 직접 업로드 대기 행을 DB 에서 찾아 지우며 돌려줌 | `FileRegistryTest` · 서버에서 직접 업로드 3단계가 인스턴스 2대에서 완료 |
 
 ```
 ./gradlew test
@@ -119,8 +127,10 @@ docker compose up -d
   │  ├─ FileController             표현 계층 · /api/files · /api/status
   │  └─ dto                        FileInfo · StatusResponse · DownloadUrlResponse · PresignUpload*
   ├─ service
-  │  ├─ FileService                검증 → 저장 → 목록 등록
-  │  └─ FileRegistry               파일 목록 · 메모리 Map · 직접 업로드 대기 목록
+  │  ├─ FileService                검증 → 저장 → 목록 등록 (이 태그에서 바뀌지 않음)
+  │  ├─ FileRegistry               파일 목록 · 메서드 이름 그대로 · 안쪽만 JPA · takePending (TODO 4)
+  │  ├─ FileRecord                 @Entity file_record · status PENDING · STORED
+  │  └─ FileRecordRepository       JpaRepository · 메서드 이름이 쿼리
   ├─ storage
   │  ├─ FileStorage                저장소 규약 · save · load · delete · downloadUrl · uploadUrl · size
   │  ├─ LocalFileStorage           @Profile("local") · 디스크
@@ -137,7 +147,8 @@ docker compose up -d
 
   src/test/java/com/example/file
   ├─ common/FileValidatorTest        TODO 1 · 2 확인
-  ├─ service/FileServiceTest         TODO 3 확인 · 가짜 저장소(FakeStorage)
+  ├─ service/FileServiceTest         TODO 3 확인 · 가짜 저장소(FakeStorage) · @SpringBootTest (목록이 DB)
+  ├─ service/FileRegistryTest        TODO 4 확인 · H2
   └─ FileServiceApplicationTest     컨텍스트 기동
 ```
 
@@ -154,7 +165,8 @@ docker compose up -d
      │
      ├──▶ FileStorage.save()             local  ./data/uploads/<id>_<name>
      │                                   prod   s3://<bucket>/uploads/<id>_<name>
-     └──▶ FileRegistry.put()             메모리
+     └──▶ FileRegistry.put()             local  H2 file_record
+                                         prod   RDS MySQL files.file_record
 ```
 
 ```
@@ -171,7 +183,9 @@ docker compose up -d
 
 **컨트롤러는 `FileStorage` 규약만 호출함.** `LocalFileStorage` · `S3FileStorage` 중 어느 구현이 주입되는지는 프로파일이 지정함. 저장소가 바뀌어도 컨트롤러 · 화면 · 검증 코드의 diff 는 0 줄.
 
-**파일 목록은 메모리에만 있음.** 앱을 다시 기동하면 목록이 비고, ALB 뒤에 인스턴스가 둘이면 목록이 서로 다름. 화면 상단 `host=` 로 확인 가능. "상태를 인스턴스에 두면 안 된다" 를 눈으로 보기 위한 의도된 구조.
+**파일 목록은 이 태그부터 데이터베이스에 있음.** 앞 태그(`file-storage-presign-put`)까지는 메모리 Map 이라 인스턴스가 둘이면 목록이 서로 달랐음. 이제 `FileRegistry` 의 메서드 이름은 그대로 두고 안쪽만 JPA 로 바꿨으므로 `FileService` 는 한 줄도 바뀌지 않았고, 인스턴스 두 대가 같은 표를 봄. 화면 상단 `registry=` · `host=` · `files=` 로 확인 가능.
+
+**같은 코드, 다른 DB.** `local` 은 H2 메모리(설치 불필요), `prod` 는 `${DB_URL}` 의 RDS MySQL. 표는 `ddl-auto: ${DDL_AUTO:update}` — 없으면 만들고 있으면 건드리지 않음 · 운영은 `validate` + 마이그레이션 도구.
 
 **S3 접근에 키가 없음.** `S3Config` 는 자격 증명을 지정하지 않음. SDK 의 기본 자격 증명 체인이 환경 변수 → 프로파일 파일 → 인스턴스 메타데이터(EC2 역할) 순으로 탐색함.
 
@@ -199,6 +213,12 @@ docker compose up -d
 | `SdkClientException … connect timed out` | 프라이빗 서브넷에서 S3 로 가는 경로 · 게이트웨이 엔드포인트 · NAT |
 | `Unable to load credentials` | 인스턴스에 역할 미연결 |
 | `/url` 이 409 | `local` 프로파일 · 디스크 저장소에는 프리사인 없음 |
+| `bootRun` 이 `DB_URL` · 드라이버 관련 오류 | 내 PC 에 `SPRING_PROFILES_ACTIVE=prod` 가 남아 있음 · 지정하지 않으면 `local` |
+| 로컬에서 다시 띄우면 목록 0 | 정상 · H2 메모리 DB |
+| `FileRegistryTest` 두 번째 `takePending` 실패 | 행을 지우지 않음 · `findByIdAndStatus(id, PENDING)` · `ifPresent(r -> repository.delete(r))` |
+| 서버 `Communications link failure` | `DB_URL` 엔드포인트 오타 · RDS `시작 중` · `db-sg 3306 ← app-sg` |
+| 서버 `Access denied for user 'admin'` | `.env` 의 암호가 비었거나 옛 비밀 ARN · `docs/rds.md` |
+| 서버 `registry=h2` | `.env` 에 `SPRING_PROFILES_ACTIVE=prod` 없음 |
 
 ---
 

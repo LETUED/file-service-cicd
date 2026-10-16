@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.example'
-version = '1.1.0'
+version = '1.2.0'
 description = 'file-service'
 
 java {
@@ -32,6 +32,11 @@ dependencies {
     // AWS SDK for Java 2.x — 버전은 BOM 하나로 맞춤.
     implementation platform("software.amazon.awssdk:bom:${awsSdkVersion}")
     implementation 'software.amazon.awssdk:s3'
+
+    // 파일 목록을 DB 에. local 은 H2(메모리), prod 는 RDS MySQL.
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.h2database:h2'
+    runtimeOnly 'com.mysql:mysql-connector-j'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

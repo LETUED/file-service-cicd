@@ -8,6 +8,7 @@ import com.example.file.api.dto.StatusResponse;
 import com.example.file.service.FileRegistry;
 import com.example.file.service.FileService;
 import com.example.file.storage.StoredFile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -40,7 +41,7 @@ import java.util.List;
  *   POST   /api/files/presign    직접 업로드 1단계 : PUT 용 임시 URL (S3 만)       → 201
  *   POST   /api/files/{id}/complete  직접 업로드 2단계 : 객체 확인 후 목록 등록  → 200
  *   DELETE /api/files/{id}       삭제                               → 204
- *   GET    /api/status           저장소 종류 · 호스트명 · 파일 수
+ *   GET    /api/status           저장소 · 목록 DB · 호스트명 · 파일 수
  */
 @RestController
 @RequestMapping("/api")
@@ -48,10 +49,13 @@ public class FileController {
 
     private final FileService fileService;
     private final FileRegistry registry;
+    private final String registryKind;
 
-    public FileController(FileService fileService, FileRegistry registry) {
+    public FileController(FileService fileService, FileRegistry registry,
+                          @Value("${app.registry.kind:h2}") String registryKind) {
         this.fileService = fileService;
         this.registry = registry;
+        this.registryKind = registryKind;
     }
 
     @PostMapping(value = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -128,7 +132,7 @@ public class FileController {
         } catch (Exception e) {
             host = "unknown";
         }
-        return new StatusResponse(fileService.storageKind(), host, registry.size());
+        return new StatusResponse(fileService.storageKind(), registryKind, host, registry.size());
     }
 
     private static MediaType mediaTypeOf(String contentType) {

@@ -1,6 +1,6 @@
 # TODO 안내
 
-이 태그에서는 비어 있는 메서드가 없음. TODO 1 · 2 · 3 은 채워진 상태 — 본인 코드와 `git diff` 로 비교함. 아래는 참고용.
+이 태그에서 비어 있는 메서드는 **TODO 4 하나** (`FileRegistry.takePending`). TODO 1 · 2 · 3 은 앞 태그에서 작성한 결과가 채워진 상태 — 본인 코드와 `git diff` 로 비교함. 1 · 2 · 3 의 설명은 참고용.
 
 ---
 
@@ -31,6 +31,7 @@
 | 1 | `common/FileValidator.validateExtension(String name)` | 허용하지 않는 확장자 거부 | `extensionOf(name)` · `ALLOWED_EXTENSIONS.contains(ext)` | `run.exe` 가 400 · `note.txt` 는 201 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
 | 2 | `common/FileValidator.validateSize(MultipartFile file)` | 업무 상한 초과 거부 | `file.getSize()` · `maxBytes` | 상한 초과가 400 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
 | 3 | `service/FileService.downloadUrl(String id)` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `get(id)` · `storage.downloadUrl(key, originalName, urlTtl)` | `FileServiceTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 `/url` 200 |
+| **4** | `service/FileRegistry.takePending(String id)` | PENDING 행을 id 로 찾아 지우며 `StoredFile` 로 돌려줌 · 없으면 empty | `repository.findByIdAndStatus(id, PENDING)` · `repository.delete(record)` · `FileRecord::toStoredFile` | `FileRegistryTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 직접 업로드 3단계가 인스턴스 2대에서도 완료 |
 
 ### 1 · 확장자 검증
 
@@ -89,6 +90,34 @@ public Optional<String> downloadUrl(String id) {
 
 **내 PC 에서는 테스트로만 확인됨.** 디스크 저장소는 프리사인 URL 을 만들 수 없으므로 작성 전후 모두 409. `FileServiceTest` 의 `FakeStorage` 가 그 자리를 대신함.
 
+### 4 · 대기 행 꺼내기 (DB 버전)
+
+**src/main/java/com/example/file/service/FileRegistry.java**
+
+```java
+public Optional<StoredFile> takePending(String id) {
+    // TODO 4 · 대기 행 꺼내기 (DB 버전)
+    // 기능        status 가 PENDING 인 행을 id 로 찾아 지우고, StoredFile 로 바꿔 돌려줌 · 없으면 Optional.empty()
+    // 활용        repository.findByIdAndStatus(id, FileRecord.Status.PENDING) → Optional<FileRecord>
+    //             repository.delete(record) → 행 삭제 · Optional.ifPresent 와 함께
+    //             FileRecord::toStoredFile → Optional.map 으로 변환
+    // 동작결과    FileRegistryTest 통과 · 서버에서 직접 업로드 3단계가 인스턴스 2대에서도 완료
+    return Optional.empty();
+}
+```
+
+```
+./gradlew test --tests '*FileRegistryTest'
+```
+
+| 확인 | 기대 |
+| --- | --- |
+| `putPending` 뒤 `find` | 비어 있음 · 대기 행은 정식 목록이 아님 |
+| 첫 `takePending` | 값 있음 |
+| 두 번째 `takePending` | 비어 있음 · 행이 지워졌음 |
+
+**`FileRegistryTest` 의 `대기_행은_한_번만_꺼내짐` 주석을 풀어야 검증됨.** 메모리 Map 버전의 `pending.remove(id)` 한 줄이 DB 에서는 "찾기 → 지우기 → 변환" 세 단계가 됨. 클래스의 `@Transactional` 이 셋을 한 단위로 묶음. 직접 업로드 1단계와 3단계를 다른 인스턴스가 받을 수 있으므로 대기 행도 DB 에 둠.
+
 ---
 
 ## 03. 응답 형태
@@ -142,6 +171,8 @@ public Optional<String> downloadUrl(String id) {
 | `validateSize` 를 썼는데 10MB 넘는 파일이 413 | 정상 · 멀티파트 상한이 먼저 · 테스트는 4바이트 상한으로 확인함 |
 | `FileServiceTest` 가 `url.isPresent()` 에서 실패 | `return Optional.empty()` 가 그대로 남아 있음 |
 | `/url` 이 내 PC 에서 409 | 정상 · 디스크 저장소 · 서버에서 확인 |
+| `FileRegistryTest` 두 번째 `takePending` 에서 실패 | 행을 지우는 줄이 없음 · `findById` 만 써서 status 를 안 봄 |
+| "reference to delete is ambiguous" | `repository::delete` 메서드 참조 → 람다 `r -> repository.delete(r)` |
 
 ---
 

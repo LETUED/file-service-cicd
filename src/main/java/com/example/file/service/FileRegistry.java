@@ -2,57 +2,69 @@ package com.example.file.service;
 
 import com.example.file.storage.StoredFile;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 파일 목록(메타데이터). 메모리에만 둠.
+ * 파일 목록(메타데이터). 이제 데이터베이스에 둠.
  *
- * 앱을 재시작하면 목록이 비고, 인스턴스가 둘이면 서로 목록이 다름.
- * 이것이 "상태를 인스턴스에 두면 안 된다"의 가장 작은 예임.
- * 파일 본체는 S3 에 남아 있으므로, 목록만 DB(RDS)로 옮기면 해결됨 → 다음 과정의 주제.
+ * 이전 단계까지는 메모리 Map 이라 인스턴스마다 목록이 달랐음.
+ * 같은 메서드 이름을 유지했으므로 FileService 는 한 줄도 바뀌지 않음.
+ *   local → H2 (메모리 DB, 설치 불필요)   prod → RDS MySQL
  */
 @Component
+@Transactional
 public class FileRegistry {
 
-    private final Map<String, StoredFile> files = new ConcurrentHashMap<>();
+    private final FileRecordRepository repository;
 
-    /** 직접 업로드 대기 목록. PUT 이 끝나고 complete 가 오기 전까지만 있음 */
-    private final Map<String, StoredFile> pending = new ConcurrentHashMap<>();
-
-    public void put(StoredFile file) {
-        files.put(file.id(), file);
+    public FileRegistry(FileRecordRepository repository) {
+        this.repository = repository;
     }
 
+    public void put(StoredFile file) {
+        repository.save(FileRecord.from(file, FileRecord.Status.STORED));
+    }
+
+    @Transactional(readOnly = true)
     public Optional<StoredFile> find(String id) {
-        return Optional.ofNullable(files.get(id));
+        return repository.findByIdAndStatus(id, FileRecord.Status.STORED).map(FileRecord::toStoredFile);
     }
 
     /** 최근 업로드가 위로 오게 정렬함 */
+    @Transactional(readOnly = true)
     public List<StoredFile> findAll() {
-        return files.values().stream()
-                .sorted(Comparator.comparing(StoredFile::uploadedAt).reversed())
-                .toList();
+        return repository.findAllByStatusOrderByUploadedAtDesc(FileRecord.Status.STORED).stream()
+                .map(FileRecord::toStoredFile).toList();
     }
 
     public void remove(String id) {
-        files.remove(id);
+        repository.deleteById(id);
     }
 
-    public void putPending(StoredFile file) {
-        pending.put(file.id(), file);
-    }
-
-    /** 대기 목록에서 꺼내며 지움. 두 번 complete 하면 두 번째는 비어 있음 */
-    public Optional<StoredFile> takePending(String id) {
-        return Optional.ofNullable(pending.remove(id));
-    }
-
+    @Transactional(readOnly = true)
     public int size() {
-        return files.size();
+        return (int) repository.countByStatus(FileRecord.Status.STORED);
+    }
+
+    /** 직접 업로드 대기. 인스턴스가 바뀌어도 complete 를 받을 수 있게 DB 에 둠 */
+    public void putPending(StoredFile file) {
+        repository.save(FileRecord.from(file, FileRecord.Status.PENDING));
+    }
+
+    /** 대기 행을 꺼내며 지움. 두 번 complete 하면 두 번째는 비어 있음 */
+    public Optional<StoredFile> takePending(String id) {
+        // TODO 4 · 대기 행 꺼내기 (DB 버전)
+        //
+        // 기능        status 가 PENDING 인 행을 id 로 찾아 지우고, StoredFile 로 바꿔 돌려줌 · 없으면 Optional.empty()
+        //             두 번 호출하면 두 번째는 비어 있어야 함 (complete 를 두 번 받아도 목록에 한 번만)
+        // 활용        repository.findByIdAndStatus(id, FileRecord.Status.PENDING)   → Optional<FileRecord>
+        //             repository.delete(record)                                     → 행 삭제 · Optional.ifPresent 와 함께
+        //             FileRecord::toStoredFile                                      → Optional.map 으로 변환
+        // 동작결과    FileRegistryTest 의 "대기_행은_한_번만_꺼내짐" 주석을 풀어 통과
+        //             서버에서는 직접 업로드 3단계가 인스턴스 2대에서도 완료됨 (대기 행이 DB 에 있으므로)
+        return Optional.empty();
     }
 }

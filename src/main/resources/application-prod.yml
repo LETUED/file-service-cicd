@@ -1,9 +1,23 @@
-# 서버. S3 에 저장함. 자격 증명은 EC2 역할(인스턴스 프로파일)에서 옴.
+# 서버. 파일은 S3, 목록은 RDS MySQL. 자격 증명은 EC2 역할 · Secrets Manager 에서 옴.
 app:
   s3:
-    # 버킷 이름은 환경 변수로만 받음. 값이 없으면 기동이 실패함 (의도된 동작)
     bucket: ${APP_S3_BUCKET}
     region: ${AWS_REGION:ap-northeast-2}
+  registry:
+    kind: mysql
+
+spring:
+  datasource:
+    # 세 값 모두 환경 변수. user-data 가 Secrets Manager 에서 읽어 .env 에 씀
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      # 최초 기동 때 file_record 표를 만듦. 운영에서는 validate 로 바꾸고 마이그레이션 도구를 씀
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: false
 
 logging:
   level:
@@ -12,5 +26,4 @@ logging:
 management:
   endpoint:
     health:
-      # 운영에서는 UP/DOWN 만 노출. 버킷 이름 등 세부는 숨김
       show-details: never
