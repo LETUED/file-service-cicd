@@ -56,15 +56,8 @@ public class FileRegistry {
 
     /** 대기 행을 꺼내며 지움. 두 번 complete 하면 두 번째는 비어 있음 */
     public Optional<StoredFile> takePending(String id) {
-        // TODO 4 · 대기 행 꺼내기 (DB 버전)
-        //
-        // 기능        status 가 PENDING 인 행을 id 로 찾아 지우고, StoredFile 로 바꿔 돌려줌 · 없으면 Optional.empty()
-        //             두 번 호출하면 두 번째는 비어 있어야 함 (complete 를 두 번 받아도 목록에 한 번만)
-        // 활용        repository.findByIdAndStatus(id, FileRecord.Status.PENDING)   → Optional<FileRecord>
-        //             repository.delete(record)                                     → 행 삭제 · Optional.ifPresent 와 함께
-        //             FileRecord::toStoredFile                                      → Optional.map 으로 변환
-        // 동작결과    FileRegistryTest 의 "대기_행은_한_번만_꺼내짐" 주석을 풀어 통과
-        //             서버에서는 직접 업로드 3단계가 인스턴스 2대에서도 완료됨 (대기 행이 DB 에 있으므로)
-        return Optional.empty();
+        Optional<FileRecord> pending = repository.findByIdAndStatus(id, FileRecord.Status.PENDING);
+        pending.ifPresent(r -> repository.delete(r));
+        return pending.map(FileRecord::toStoredFile);
     }
 }

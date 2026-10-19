@@ -7,7 +7,7 @@
 # AWS 자격 증명은 넣지 않음. 컨테이너는 EC2 역할(인스턴스 메타데이터)을 그대로 씀.
 services:
   app:
-    image: ${DOCKERHUB_USER:-<dockerhub_id>}/file-service:${APP_IMAGE_TAG:-1.2.0}
+    image: ${DOCKERHUB_USER:-<dockerhub_id>}/file-service:${APP_IMAGE_TAG:-1.3.0}
     container_name: file-service
     restart: unless-stopped
     ports:

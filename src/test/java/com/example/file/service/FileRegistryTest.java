@@ -45,12 +45,12 @@ class FileRegistryTest {
     }
 
     // TODO 4 · FileRegistry.takePending 을 작성한 뒤 아래 주석을 풀면 통과해야 함
-    // @Test
-    // void 대기_행은_한_번만_꺼내짐() {
-    //     StoredFile f = sample("pending.txt");
-    //     registry.putPending(f);
-    //     assertTrue(registry.find(f.id()).isEmpty());               // 대기 행은 정식 목록에 없음
-    //     assertTrue(registry.takePending(f.id()).isPresent());       // 첫 번째는 꺼냄
-    //     assertTrue(registry.takePending(f.id()).isEmpty());         // 두 번째는 비어 있음
-    // }
+    @Test
+    void 대기_행은_한_번만_꺼내짐() {
+        StoredFile f = sample("pending.txt");
+        registry.putPending(f);
+        assertTrue(registry.find(f.id()).isEmpty());               // 대기 행은 정식 목록에 없음
+        assertTrue(registry.takePending(f.id()).isPresent());       // 첫 번째는 꺼냄
+        assertTrue(registry.takePending(f.id()).isEmpty());         // 두 번째는 비어 있음
+    }
 }

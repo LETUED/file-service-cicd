@@ -1,6 +1,6 @@
 # TODO 안내
 
-이 태그에서 비어 있는 메서드는 **TODO 4 하나** (`FileRegistry.takePending`). TODO 1 · 2 · 3 은 앞 태그에서 작성한 결과가 채워진 상태 — 본인 코드와 `git diff` 로 비교함. 1 · 2 · 3 의 설명은 참고용.
+이 태그에서 비어 있는 메서드는 **TODO 5 하나** (`DynamoFileEventRecorder.toItem`). TODO 1 ~ 4 는 앞 태그에서 작성한 결과가 채워진 상태 — 본인 코드와 `git diff` 로 비교함. 1 ~ 4 의 설명은 참고용.
 
 ---
 
@@ -31,7 +31,8 @@
 | 1 | `common/FileValidator.validateExtension(String name)` | 허용하지 않는 확장자 거부 | `extensionOf(name)` · `ALLOWED_EXTENSIONS.contains(ext)` | `run.exe` 가 400 · `note.txt` 는 201 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
 | 2 | `common/FileValidator.validateSize(MultipartFile file)` | 업무 상한 초과 거부 | `file.getSize()` · `maxBytes` | 상한 초과가 400 · `FileValidatorTest` 의 주석 처리된 테스트를 풀어 통과 |
 | 3 | `service/FileService.downloadUrl(String id)` | 목록에서 찾아 저장소의 프리사인 URL 을 돌려줌 | `get(id)` · `storage.downloadUrl(key, originalName, urlTtl)` | `FileServiceTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 `/url` 200 |
-| **4** | `service/FileRegistry.takePending(String id)` | PENDING 행을 id 로 찾아 지우며 `StoredFile` 로 돌려줌 · 없으면 empty | `repository.findByIdAndStatus(id, PENDING)` · `repository.delete(record)` · `FileRecord::toStoredFile` | `FileRegistryTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 직접 업로드 3단계가 인스턴스 2대에서도 완료 |
+| 4 | `service/FileRegistry.takePending(String id)` | PENDING 행을 id 로 찾아 지우며 `StoredFile` 로 돌려줌 · 없으면 empty | `repository.findByIdAndStatus(id, PENDING)` · `repository.delete(record)` · `FileRecord::toStoredFile` | `FileRegistryTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 직접 업로드 3단계가 인스턴스 2대에서도 완료 |
+| **5** | `event/DynamoFileEventRecorder.toItem(fileId, type, host, now)` | 이벤트 한 건을 DynamoDB 항목 Map 으로 만듦 · `at` = ISO 시각#난수 8자 · `expireAt` = 30일 뒤 epoch 초(N) | `AttributeValue.fromS` · `fromN` · `now.toString()` · `UUID…substring(0, 8)` · `now.plus(KEEP).getEpochSecond()` | `DynamoItemTest` 의 주석 처리된 테스트를 풀어 통과 · 서버에서 DynamoDB 항목 탐색에 이벤트가 보임 |
 
 ### 1 · 확장자 검증
 
@@ -118,6 +119,45 @@ public Optional<StoredFile> takePending(String id) {
 
 **`FileRegistryTest` 의 `대기_행은_한_번만_꺼내짐` 주석을 풀어야 검증됨.** 메모리 Map 버전의 `pending.remove(id)` 한 줄이 DB 에서는 "찾기 → 지우기 → 변환" 세 단계가 됨. 클래스의 `@Transactional` 이 셋을 한 단위로 묶음. 직접 업로드 1단계와 3단계를 다른 인스턴스가 받을 수 있으므로 대기 행도 DB 에 둠.
 
+### 5 · 이벤트 항목 만들기 (키 설계를 코드로)
+
+**src/main/java/com/example/file/event/DynamoFileEventRecorder.java**
+
+```java
+static Map<String, AttributeValue> toItem(String fileId, String type, String host, Instant now) {
+    // TODO 5 · 이벤트 항목 만들기 (키 설계를 코드로)
+    // 기능        다섯 속성을 가진 Map 을 돌려줌
+    //             fileId   → 파티션 키 · 그대로
+    //             at       → 정렬 키 · now 의 ISO 문자열 + "#" + 난수 8자
+    //             type     → 이벤트 종류 · GSI type-at-index 의 파티션 키
+    //             host     → 응답한 인스턴스
+    //             expireAt → TTL · now + KEEP 을 epoch "초" 로 · 숫자(N) 형식
+    // 활용        AttributeValue.fromS(String) · AttributeValue.fromN(String)
+    //             now.toString() · UUID.randomUUID().toString().substring(0, 8)
+    //             now.plus(KEEP).getEpochSecond() · Map.of(k1, v1, …)
+    // 동작결과    DynamoItemTest 통과 · 서버에서 DynamoDB 항목 탐색에 이벤트가 보임
+    return Map.of();
+}
+```
+
+```
+./gradlew test --tests '*DynamoItemTest'
+```
+
+| 확인 | 기대 |
+| --- | --- |
+| 속성 이름 | 정확히 `fileId` · `at` · `type` · `host` · `expireAt` 다섯 개 · 대소문자까지 표의 키와 같음 |
+| `at` | `2026-10-19T01:02:03.456Z#` 로 시작 · 뒤에 8자 · 두 번 만들면 서로 다름 |
+| `expireAt` | 숫자(N) · 10자리 · 테스트 시각 + 30일(2,592,000초) |
+
+**`DynamoItemTest` 의 `이벤트_항목은_키_설계대로_만들어짐` 주석을 풀어야 검증됨.** `toItem` 은 AWS 를 부르지 않으므로 표 · 자격 증명 없이 내 PC 에서 확인함. 실제 쓰기(`PutItem`) · 다운로드 횟수(`UpdateItem ADD`) · 이력(`Query`)은 이미 채워진 `record` · `events` 에서 이 Map 을 씀.
+
+| 어긋나면 | 서버에서 생기는 일 |
+| --- | --- |
+| 키 이름 오타(`fileid` · `At`) | `PutItem` 이 `ValidationException` — 표의 키와 다름 |
+| `at` 에 난수 없음 | 같은 밀리초의 두 이벤트 중 하나가 조건부 쓰기에서 실패 |
+| `expireAt` 을 밀리초 · 문자열로 | TTL 이 그 항목을 영원히 지우지 않음 |
+
 ---
 
 ## 03. 응답 형태
@@ -173,6 +213,10 @@ public Optional<StoredFile> takePending(String id) {
 | `/url` 이 내 PC 에서 409 | 정상 · 디스크 저장소 · 서버에서 확인 |
 | `FileRegistryTest` 두 번째 `takePending` 에서 실패 | 행을 지우는 줄이 없음 · `findById` 만 써서 status 를 안 봄 |
 | "reference to delete is ambiguous" | `repository::delete` 메서드 참조 → 람다 `r -> repository.delete(r)` |
+| `DynamoItemTest` · 속성 이름 집합이 다름 | `Map.of` 의 키 철자 · 다섯 개 모두 넣었는지 |
+| `DynamoItemTest` · `expireAt` 이 null | `fromS` 로 넣음 → `.n()` 이 null · `fromN` |
+| `DynamoItemTest` · 길이 13 | `toEpochMilli()` · `getEpochSecond()` 로 |
+| `Map.of` 에서 컴파일 오류 | 키 · 값을 번갈아 10개 · 값은 모두 `AttributeValue` |
 
 ---
 

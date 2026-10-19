@@ -7,15 +7,16 @@
 | 방법 | 경로 | 설명 | 성공 |
 | --- | --- | --- | --- |
 | POST | `/api/files` | 업로드. multipart, 항목 이름 `file` | 201 + `Location` |
-| GET | `/api/files` | 목록 (최근 업로드가 위) | 200 |
+| GET | `/api/files` | 목록 (최근 업로드가 위) · 캐시 30초 · 업로드 · 완료 · 삭제 때 지움 (1.3.0) | 200 |
 | GET | `/api/files/{id}` | 파일 정보 | 200 |
 | GET | `/api/files/{id}/content` | 앱을 거쳐 내려받음 | 200 (바이너리) |
 | GET | `/api/files/{id}/url` | 저장소에서 직접 받는 임시 URL | 200 / local 이면 409 |
 | POST | `/api/files/presign` | 직접 업로드 1단계. JSON `{name, contentType}` → PUT 용 임시 URL (1.1.0) | 201 / local 이면 409 |
 | POST | `/api/files/{id}/complete` | 직접 업로드 2단계. S3 에 객체가 있는지 확인 후 목록 등록 (1.1.0) | 200 |
 | DELETE | `/api/files/{id}` | 삭제 | 204 |
-| GET | `/api/status` | 저장소 · 목록 DB · 호스트명 · 파일 수 | 200 |
-| GET | `/actuator/health` | 생존 확인. prod 에서는 DB(RDS) · S3 검사 포함 · 하나라도 실패하면 `DOWN` · 503 (1.2.0) | 200 `{"status":"UP"}` |
+| GET | `/api/files/{id}/events` | 이벤트 이력 · 다운로드 횟수. prod 는 DynamoDB (1.3.0) | 200 |
+| GET | `/api/status` | 저장소 · 목록 DB · 캐시 · 이벤트 · 호스트명 · 파일 수 | 200 |
+| GET | `/actuator/health` | 생존 확인. prod 에서는 DB(RDS) · S3 검사 포함 · 하나라도 실패하면 `DOWN` · 503 (1.2.0) · 캐시 · DynamoDB 는 넣지 않음 (1.3.0) | 200 `{"status":"UP"}` |
 | GET | `/actuator/info` | 빌드 버전 · 시각 | 200 |
 
 ## 02. 실패 코드
@@ -53,6 +54,9 @@ curl -s $BASE/api/files/$ID/url
 # 삭제
 curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/api/files/$ID   # 204
 
+# 이벤트 이력 · 다운로드 횟수 (1.3.0)
+curl -s $BASE/api/files/$ID/events
+
 # 상태
 curl -s $BASE/api/status
 ```
@@ -76,8 +80,18 @@ curl -s $BASE/api/status
   "expiresIn": 300
 }
 
+// GET /api/files/{id}/events → 200 (1.3.0)
+{
+  "fileId": "7c2f1d0e-9a44-4b3f-8f1a-2b9c6d5e4f30",
+  "downloads": 1,
+  "events": [
+    { "fileId": "7c2f…", "at": "2026-10-19T01:12:45.120Z#a1b2c3d4", "type": "UPLOAD",   "host": "ip-10-0-11-23" },
+    { "fileId": "7c2f…", "at": "2026-10-19T01:13:02.871Z#5e6f7a8b", "type": "DOWNLOAD", "host": "ip-10-0-12-88" }
+  ]
+}
+
 // GET /api/status → 200
-{ "storage": "s3", "registry": "mysql", "host": "ip-10-0-11-23", "files": 3 }
+{ "storage": "s3", "registry": "mysql", "cache": "redis", "events": "dynamodb", "host": "ip-10-0-11-23", "files": 3 }
 
 // 실패 → 400
 { "status": 400, "code": "BAD_REQUEST", "message": "허용하지 않는 확장자: exe", "timestamp": "2026-10-13T10:12:45.12" }

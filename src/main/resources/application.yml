@@ -11,6 +11,11 @@ spring:
   jpa:
     # 응답을 만드는 동안 DB 연결을 잡고 있지 않음 (경고 제거)
     open-in-view: false
+  data:
+    redis:
+      repositories:
+        # Redis 는 캐시로만 씀 · 리포지토리는 JPA 만 (기동 로그의 strict mode 안내 제거)
+        enabled: false
   servlet:
     multipart:
       # 멀티파트 상한. 넘기면 컨트롤러에 닿기 전에 413 으로 거부됨.
@@ -36,3 +41,7 @@ management:
   info:
     build:
       enabled: true
+  health:
+    redis:
+      # 캐시는 선택 저장소. health 에 넣으면 캐시 장애가 ALB unhealthy → 인스턴스 교체로 번짐
+      enabled: false

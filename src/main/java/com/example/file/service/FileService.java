@@ -7,6 +7,8 @@ import com.example.file.storage.StoredFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +48,8 @@ public class FileService {
         return storage.kind();
     }
 
+    /** 목록이 바뀌므로 캐시를 지움 (메서드가 성공한 뒤에 지움 — 그 사이 읽기가 옛 목록을 다시 채우지 않게) */
+    @CacheEvict(value = "files", key = "'list'")
     public StoredFile upload(MultipartFile file) throws IOException {
         validator.validate(file);
 
@@ -80,6 +85,7 @@ public class FileService {
      * 저장소에 객체가 실제로 있는지(headObject) 확인하고 나서야 목록에 올림.
      * 브라우저 말만 믿고 올리면, 실패한 업로드가 목록에 남음.
      */
+    @CacheEvict(value = "files", key = "'list'")
     public StoredFile completeUpload(String id) throws IOException {
         StoredFile pending = registry.takePending(id)
                 .orElseThrow(() -> new NotFoundException("대기 중인 업로드 없음: " + id));
@@ -98,6 +104,22 @@ public class FileService {
 
     public List<StoredFile> list() {
         return registry.findAll();
+    }
+
+    /**
+     * 캐시되는 목록 (cache-aside). 캐시에 있으면 DB 를 부르지 않고, 없으면 DB 에서 읽어 캐시에 넣음.
+     * 캐시 키는 files::list — prod 에서는 redis-cli 로 그대로 찾을 수 있음 · 30초 뒤 만료(CacheConfig).
+     * List 를 그대로 캐시하면 JSON 에서 되돌릴 때 원소 타입을 잃으므로 record 로 감쌈.
+     */
+    @Cacheable(value = "files", key = "'list'")
+    public FileList listCached() {
+        log.info("목록 조회 (DB)");
+        // ArrayList 로 복사 — Stream.toList() 의 불변 목록은 JSON 에서 되돌릴 때 만들 수 없는 형식이라 피함
+        return new FileList(new ArrayList<>(registry.findAll()));
+    }
+
+    /** 캐시에 들어가는 목록 묶음 */
+    public record FileList(List<StoredFile> items) {
     }
 
     public StoredFile get(String id) {
@@ -119,6 +141,7 @@ public class FileService {
         return urlTtl;
     }
 
+    @CacheEvict(value = "files", key = "'list'")
     public void delete(String id) throws IOException {
         StoredFile file = get(id);
         storage.delete(file.key());

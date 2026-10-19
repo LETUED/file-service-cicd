@@ -1,10 +1,12 @@
 package com.example.file.api;
 
 import com.example.file.api.dto.DownloadUrlResponse;
+import com.example.file.api.dto.EventsResponse;
 import com.example.file.api.dto.FileInfo;
 import com.example.file.api.dto.PresignUploadRequest;
 import com.example.file.api.dto.PresignUploadResponse;
 import com.example.file.api.dto.StatusResponse;
+import com.example.file.event.FileEventRecorder;
 import com.example.file.service.FileRegistry;
 import com.example.file.service.FileService;
 import com.example.file.storage.StoredFile;
@@ -41,7 +43,11 @@ import java.util.List;
  *   POST   /api/files/presign    직접 업로드 1단계 : PUT 용 임시 URL (S3 만)       → 201
  *   POST   /api/files/{id}/complete  직접 업로드 2단계 : 객체 확인 후 목록 등록  → 200
  *   DELETE /api/files/{id}       삭제                               → 204
- *   GET    /api/status           저장소 · 목록 DB · 호스트명 · 파일 수
+ *   GET    /api/files/{id}/events  이벤트 이력 · 다운로드 횟수 (prod 는 DynamoDB)
+ *   GET    /api/status           저장소 · 목록 DB · 캐시 · 이벤트 · 호스트명 · 파일 수
+ *
+ * 요청이 성공하면 이벤트를 한 건 남김(events.record). 기록이 실패하면 지금은 요청도 500 이 됨
+ * — 실패를 어디서 잡을지는 수업의 설계 과제.
  */
 @RestController
 @RequestMapping("/api")
@@ -49,18 +55,24 @@ public class FileController {
 
     private final FileService fileService;
     private final FileRegistry registry;
+    private final FileEventRecorder events;
     private final String registryKind;
+    private final String cacheKind;
 
-    public FileController(FileService fileService, FileRegistry registry,
-                          @Value("${app.registry.kind:h2}") String registryKind) {
+    public FileController(FileService fileService, FileRegistry registry, FileEventRecorder events,
+                          @Value("${app.registry.kind:h2}") String registryKind,
+                          @Value("${spring.cache.type:simple}") String cacheKind) {
         this.fileService = fileService;
         this.registry = registry;
+        this.events = events;
         this.registryKind = registryKind;
+        this.cacheKind = cacheKind;
     }
 
     @PostMapping(value = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<FileInfo> upload(@RequestParam("file") MultipartFile file) throws IOException {
         StoredFile stored = fileService.upload(file);
+        events.record(stored.id(), "UPLOAD", hostName());
         return ResponseEntity.created(URI.create("/api/files/" + stored.id()))
                 .body(FileInfo.from(stored));
     }
@@ -81,12 +93,22 @@ public class FileController {
     /** 직접 업로드 2단계. 저장소에 객체가 없으면 400 */
     @PostMapping("/files/{id}/complete")
     public FileInfo complete(@PathVariable String id) throws IOException {
-        return FileInfo.from(fileService.completeUpload(id));
+        StoredFile stored = fileService.completeUpload(id);
+        events.record(stored.id(), "UPLOAD_DIRECT", hostName());
+        return FileInfo.from(stored);
     }
 
+    /** 목록. 캐시(30초)를 먼저 봄 — 캐시에 있으면 DB 를 거치지 않음 */
     @GetMapping("/files")
     public List<FileInfo> list() {
-        return fileService.list().stream().map(FileInfo::from).toList();
+        return fileService.listCached().items().stream().map(FileInfo::from).toList();
+    }
+
+    /** 이 파일의 이벤트 이력과 다운로드 횟수. prod 는 DynamoDB Query 한 번 + GetItem 한 번 */
+    @GetMapping("/files/{id}/events")
+    public EventsResponse events(@PathVariable String id) {
+        fileService.get(id);
+        return new EventsResponse(id, events.downloads(id), events.events(id));
     }
 
     @GetMapping("/files/{id}")
@@ -99,6 +121,7 @@ public class FileController {
     public ResponseEntity<Resource> download(@PathVariable String id) throws IOException {
         StoredFile file = fileService.get(id);
         Resource body = fileService.download(id);
+        events.record(id, "DOWNLOAD", hostName());
 
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(file.originalName(), StandardCharsets.UTF_8)
@@ -113,26 +136,33 @@ public class FileController {
     @GetMapping("/files/{id}/url")
     public ResponseEntity<DownloadUrlResponse> downloadUrl(@PathVariable String id) {
         return fileService.downloadUrl(id)
-                .map(url -> ResponseEntity.ok(
-                        new DownloadUrlResponse(id, url, fileService.urlTtl().toSeconds())))
+                .map(url -> {
+                    events.record(id, "PRESIGN_GET", hostName());
+                    return ResponseEntity.ok(new DownloadUrlResponse(id, url, fileService.urlTtl().toSeconds()));
+                })
                 .orElseGet(() -> ResponseEntity.status(409).build());
     }
 
     @DeleteMapping("/files/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) throws IOException {
         fileService.delete(id);
+        // 삭제 뒤에는 /events 가 404(목록에 없음) — DELETE 항목은 DynamoDB 콘솔에서 fileId 로 봄
+        events.record(id, "DELETE", hostName());
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/status")
     public StatusResponse status() {
-        String host;
+        return new StatusResponse(fileService.storageKind(), registryKind, cacheKind, events.kind(),
+                hostName(), registry.size());
+    }
+
+    private static String hostName() {
         try {
-            host = InetAddress.getLocalHost().getHostName();
+            return InetAddress.getLocalHost().getHostName();
         } catch (Exception e) {
-            host = "unknown";
+            return "unknown";
         }
-        return new StatusResponse(fileService.storageKind(), registryKind, host, registry.size());
     }
 
     private static MediaType mediaTypeOf(String contentType) {

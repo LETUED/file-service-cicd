@@ -1,10 +1,13 @@
-# 서버. 파일은 S3, 목록은 RDS MySQL. 자격 증명은 EC2 역할 · Secrets Manager 에서 옴.
+# 서버. 파일은 S3, 목록은 RDS MySQL, 캐시는 ElastiCache, 이벤트는 DynamoDB. 자격 증명은 EC2 역할 · Secrets Manager 에서 옴.
 app:
   s3:
     bucket: ${APP_S3_BUCKET}
     region: ${AWS_REGION:ap-northeast-2}
   registry:
     kind: mysql
+  events:
+    # DynamoDB 표 이름. 환경 변수로만 (비어 있으면 기동 실패)
+    table: ${APP_EVENTS_TABLE}
 
 spring:
   datasource:
@@ -18,6 +21,16 @@ spring:
       # 최초 기동 때 file_record 표를 만듦. 운영에서는 validate 로 바꾸고 마이그레이션 도구를 씀
       ddl-auto: ${DDL_AUTO:update}
     show-sql: false
+  cache:
+    type: redis
+  data:
+    redis:
+      # ElastiCache(Valkey) 기본 엔드포인트. 인증 · 전송 암호화 없음 — 격리 서브넷 + cache-sg 로 보호
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      # 연결 · 명령 제한 시간. 캐시가 멈췄을 때 요청이 1초 넘게 매달리지 않게
+      timeout: 1s
+      connect-timeout: 1s
 
 logging:
   level:

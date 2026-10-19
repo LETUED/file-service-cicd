@@ -26,7 +26,7 @@ async function loadStatus() {
     const res = await fetch('/api/status');
     const s = await res.json();
     const el = $('#status');
-    el.textContent = `storage=${s.storage}  registry=${s.registry}  host=${s.host}  files=${s.files}`;
+    el.textContent = `storage=${s.storage}  registry=${s.registry}  cache=${s.cache}  events=${s.events}  host=${s.host}  files=${s.files}`;
     el.className = 'status ' + s.storage;
   } catch (e) {
     $('#status').textContent = '상태 확인 실패';
