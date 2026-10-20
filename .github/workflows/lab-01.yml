@@ -10,3 +10,9 @@ jobs:
     steps:
       - name: 인사
         run: echo "첫 워크플로 실행 성공"
+      - name: 러너 정보
+        run: |
+          uname -a
+          nproc
+      - name: 받기 전 폴더 목록
+        run: ls -la
