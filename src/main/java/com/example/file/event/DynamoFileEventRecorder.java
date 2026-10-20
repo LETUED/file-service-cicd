@@ -78,7 +78,14 @@ public class DynamoFileEventRecorder implements FileEventRecorder {
         //             Map.of(k1, v1, k2, v2, …)                          → 다섯 쌍
         // 동작결과    DynamoItemTest 의 "이벤트_항목은_키_설계대로_만들어짐" 주석을 풀어 통과
         //             서버에서 업로드 · 다운로드 뒤 DynamoDB 콘솔 항목 탐색에 fileId · at · type · host · expireAt 이 보임
-        return Map.of();
+        String at = now.toString() + "#" + UUID.randomUUID().toString().substring(0, 8);
+        long expireAt = now.plus(KEEP).getEpochSecond();
+        return Map.of(
+                "fileId", AttributeValue.fromS(fileId),
+                "at", AttributeValue.fromS(at),
+                "type", AttributeValue.fromS(type),
+                "host", AttributeValue.fromS(host),
+                "expireAt", AttributeValue.fromN(Long.toString(expireAt)));
     }
 
     @Override
