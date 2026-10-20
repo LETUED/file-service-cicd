@@ -22,7 +22,7 @@ public class FileValidator {
 
     /** 허용 확장자. 소문자로 비교함 */
     static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "txt", "md", "csv", "json",
+            "hwp", "md", "csv", "json",
             "png", "jpg", "jpeg", "gif",
             "pdf", "zip");
 
