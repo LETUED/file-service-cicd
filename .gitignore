@@ -20,3 +20,16 @@ logs/
 # 비밀 값. .env.example 만 올림
 .env
 env.sh
+
+# 키 · 자격 증명 (공개 저장소 — 절대 올리지 않음)
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.aws/
+credentials
+
+# Terraform (11월) — 상태 파일 안에 비밀이 평문으로 들어감
+*.tfstate
+*.tfstate.*
+.terraform/
